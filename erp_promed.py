@@ -96,8 +96,8 @@ if st.session_state.user is None:
                     st.error("🔴 Votre compte n'est lié à aucune entreprise.")
                     supabase.auth.sign_out() 
                     st.session_state.user = None
-            except Exception as e:
-                st.error("🔴 Identifiants incorrects. Veuillez réessayer.")
+           except Exception as e:
+                st.error(f"🔴 Erreur détaillée : {e}")
     st.stop() 
 
 # --- Utilisateur authentifié ---
