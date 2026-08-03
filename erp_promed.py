@@ -10,7 +10,7 @@ from supabase import create_client, Client
 st.set_page_config(page_title="OPTIALU", layout="wide")
 
 # ==========================================
-# CONNEXION SUPABASE SAAS
+# 1. CONNEXION SUPABASE SAAS
 # ==========================================
 try:
     SUPABASE_URL = st.secrets["supabase"]["url"]
@@ -21,11 +21,64 @@ except Exception as e:
     st.sidebar.error("🔴 Erreur de configuration Supabase. Vérifiez les secrets.")
 
 # ==========================================
-# 🔐 GESTION DE L'AUTHENTIFICATION (MULTI-TENANT)
+# 2. FONCTIONS DE BASE & UTILITAIRES
 # ==========================================
-for key in ["user", "access_token", "refresh_token", "entreprise_id", "user_nom", "nom_entreprise"]:
-    if key not in st.session_state:
-        st.session_state[key] = None
+def clean_string(s):
+    if not s: return ""
+    return re.sub(r'\s+', '', str(s)).upper().strip()
+
+def safe_float(val, default=1.0):
+    try:
+        v = str(val).replace(',', '.').strip()
+        if not v or v == '-': return default
+        return float(v)
+    except: return default
+
+def evaluer_formule(formule, L, H, hC, nom_composant):
+    if not formule or str(formule).strip() in ["-", ""]: return 0.0
+    f = str(formule).replace('=', '').replace(',', '.').upper().strip()
+    f = f.replace('X', '*')
+    nom_comp_maj = str(nom_composant).upper()
+    if "H" in f:
+        if "COUVRE" in nom_comp_maj or "CJ" in nom_comp_maj: f = f.replace("H", str(H))
+        else: f = f.replace("H", f"({H} - {hC})")
+    if "L" in f: f = f.replace("L", str(L))
+    f = re.sub(r'[^0-9\+\-\*\/\(\)\.]', '', f)
+    try: return round(float(eval(f)), 1)
+    except: return 0.0
+
+def generer_reperes_auto(df):
+    c_f = 0; c_p = 0; c_pf = 0; c_o = 0
+    new_reperes = []
+    for idx, row in df.iterrows():
+        ouvr_raw = str(row.get("Ouvrage", "")).strip().upper()
+        if not ouvr_raw: new_reperes.append("")
+        elif ouvr_raw.startswith("PF"): c_pf += 1; new_reperes.append(f"PF{c_pf}")
+        elif ouvr_raw.startswith("P"): c_p += 1; new_reperes.append(f"P{c_p}")
+        elif ouvr_raw.startswith("F"): c_f += 1; new_reperes.append(f"F{c_f}")
+        else: c_o += 1; new_reperes.append(f"O{c_o}")
+    df_out = df.copy()
+    df_out["Repère"] = new_reperes
+    return df_out
+
+def optimize_cutting_1d_with_ref(cuts_list, bar_length=6000, blade_width=5):
+    cuts_sorted = sorted(cuts_list, key=lambda x: x['length'], reverse=True)
+    bars = []
+    for cut in cuts_sorted:
+        placed = False
+        for bar in bars:
+            occupied = sum(c['length'] for c in bar) + (len(bar) * blade_width)
+            if occupied + cut['length'] <= bar_length:
+                bar.append(cut)
+                placed = True
+                break
+        if not placed: bars.append([cut])
+    return bars
+
+def get_default_df():
+    return pd.DataFrame(columns=[
+        "Repère", "Gamme", "Série", "Ouvrage", "Largeur (L)", "Hauteur (H)", "Qté", "Volet Roulant", "H Caisson", "Vitrage"
+    ])
 
 def fetch_entreprise_info(ent_id):
     try:
@@ -35,6 +88,62 @@ def fetch_entreprise_info(ent_id):
     except:
         pass
     return "Inconnue"
+
+def fetch_project_list():
+    try:
+        response = supabase.table("projets").select("id, nom_projet").eq("entreprise_id", st.session_state.entreprise_id).execute()
+        return response.data  
+    except:
+        return []
+
+@st.cache_data(ttl=3600) 
+def load_app_library():
+    try:
+        # On interroge toute la table sans restriction
+        response = supabase.table("bibliotheque_gammes").select("*").execute()
+        legacy_data = []
+        for item in response.data:
+            legacy_data.append({
+                "Gamme": item.get("gamme", ""), "Type Ouvrage": item.get("type_ouvrage", ""),
+                "Composant": item.get("composant", ""), "Ref": item.get("ref", ""),
+                "Formule Long": item.get("formule_long", ""), "Qté": item.get("qte", 1),
+                "Unité": item.get("unite", ""), "Type": item.get("type_article", ""),
+                "PU": item.get("pu", 0), "Série": item.get("serie", "")
+            })
+        return legacy_data
+    except Exception as e:
+        return []
+
+def logout():
+    supabase.auth.sign_out()
+    for key in ["user", "access_token", "refresh_token", "entreprise_id", "user_nom", "nom_entreprise"]:
+        st.session_state[key] = None
+    st.cache_data.clear() 
+    st.rerun()
+
+# ==========================================
+# 3. INITIALISATION DES VARIABLES DE SESSION
+# ==========================================
+for key in ["user", "access_token", "refresh_token", "entreprise_id", "user_nom", "nom_entreprise"]:
+    if key not in st.session_state:
+        st.session_state[key] = None
+
+if "chassis_rows_v27" not in st.session_state:
+    st.session_state.chassis_rows_v27 = get_default_df()
+if "current_project_name" not in st.session_state:
+    st.session_state.current_project_name = "Nouveau Projet (Non Sauvegardé)"
+if "current_project_id" not in st.session_state:
+    st.session_state.current_project_id = None
+if "df_garde_corps" not in st.session_state:
+    st.session_state.df_garde_corps = pd.DataFrame([
+        {"Emplacement / Réf": "Balcon RDC", "Longueur (mm)": 2500, "Quantité": 2},
+        {"Emplacement / Réf": "Terrasse Étage", "Longueur (mm)": 1800, "Quantité": 1},
+        {"Emplacement / Réf": "Escalier", "Longueur (mm)": 950, "Quantité": 5}
+    ])
+
+# ==========================================
+# 4. GESTION DE L'AUTHENTIFICATION
+# ==========================================
 if st.session_state.access_token and st.session_state.refresh_token:
     try:
         supabase.auth.set_session(st.session_state.access_token, st.session_state.refresh_token)
@@ -45,17 +154,11 @@ if st.session_state.access_token and st.session_state.refresh_token:
                 if profile_res.data:
                     st.session_state.user_nom = profile_res.data[0].get("nom", "Utilisateur")
             
-           st.session_state.nom_entreprise = fetch_entreprise_info(st.session_state.entreprise_id)
+            st.session_state.nom_entreprise = fetch_entreprise_info(st.session_state.entreprise_id)
     except:
         st.session_state.user = None 
 
-def logout():
-    supabase.auth.sign_out()
-    for key in ["user", "access_token", "refresh_token", "entreprise_id", "user_nom", "nom_entreprise"]:
-        st.session_state[key] = None
-    st.cache_data.clear() 
-    st.rerun()
-
+# --- Écran de connexion ---
 if st.session_state.user is None:
     st.markdown('<div class="main-title">🔐 Connexion OPTIALU</div>', unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -76,7 +179,7 @@ if st.session_state.user is None:
                 if profile_res.data:
                     st.session_state.entreprise_id = profile_res.data[0]["entreprise_id"]
                     st.session_state.user_nom = profile_res.data[0].get("nom", "Utilisateur")
-                   st.session_state.nom_entreprise = fetch_entreprise_info(st.session_state.entreprise_id)
+                    st.session_state.nom_entreprise = fetch_entreprise_info(st.session_state.entreprise_id)
                     st.cache_data.clear() 
                     st.rerun()
                 else:
@@ -87,7 +190,9 @@ if st.session_state.user is None:
                 st.error(f"🔴 Erreur détaillée : {e}")
     st.stop() 
 
-# --- Utilisateur authentifié ---
+# ==========================================
+# 5. UTILISATEUR CONNECTÉ - CHARGEMENT DONNÉES
+# ==========================================
 st.markdown('<div class="main-title">OPTIALU</div>', unsafe_allow_html=True)
 
 nom_ent_affiche = st.session_state.get('nom_entreprise') or "Inconnue"
@@ -105,28 +210,6 @@ st.markdown(
 st.sidebar.button("🚪 Se déconnecter", on_click=logout, use_container_width=True)
 st.sidebar.markdown("---")
 
-# ==========================================
-# GESTION DES DONNÉES & CATALOGUE
-# ==========================================
-@st.cache_data(ttl=3600) 
-def load_app_library():
-    try:
-        # On interroge toute la table sans le filtre .in_()
-        response = supabase.table("bibliotheque_gammes").select("*").execute()
-        legacy_data = []
-        for item in response.data:
-            legacy_data.append({
-                "Gamme": item.get("gamme", ""), "Type Ouvrage": item.get("type_ouvrage", ""),
-                "Composant": item.get("composant", ""), "Ref": item.get("ref", ""),
-                "Formule Long": item.get("formule_long", ""), "Qté": item.get("qte", 1),
-                "Unité": item.get("unite", ""), "Type": item.get("type_article", ""),
-                "PU": item.get("pu", 0), "Série": item.get("serie", "")
-            })
-        return legacy_data
-    except Exception as e:
-        return []
-
-# L'appel est maintenant tout simple
 BIBLIOTHEQUE = load_app_library()
 PALETTE_COULEURS = ["#1E40AF", "#10B981", "#D97706", "#DC2626", "#7C3AED", "#0891B2", "#EC4899"]
 
@@ -138,23 +221,8 @@ if not choix_gammes_dynamiques: choix_gammes_dynamiques = ["-"]
 if not choix_series_dynamiques: choix_series_dynamiques = ["-"]
 if not choix_types_dynamiques: choix_types_dynamiques = ["-"]
 
-def get_default_df():
-    return pd.DataFrame(columns=[
-        "Repère", "Gamme", "Série", "Ouvrage", "Largeur (L)", "Hauteur (H)", "Qté", "Volet Roulant", "H Caisson", "Vitrage"
-    ])
-
-if "chassis_rows_v27" not in st.session_state:
-    st.session_state.chassis_rows_v27 = get_default_df()
-if "current_project_name" not in st.session_state:
-    st.session_state.current_project_name = "Nouveau Projet (Non Sauvegardé)"
-if "current_project_id" not in st.session_state:
-    st.session_state.current_project_id = None
-if "df_garde_corps" not in st.session_state:
-    st.session_state.df_garde_corps = pd.DataFrame([
-        {"Emplacement / Réf": "Balcon RDC", "Longueur (mm)": 2500, "Quantité": 2},
-        {"Emplacement / Réf": "Terrasse Étage", "Longueur (mm)": 1800, "Quantité": 1},
-        {"Emplacement / Réf": "Escalier", "Longueur (mm)": 950, "Quantité": 5}
-    ])
+NOM_PROJET = st.session_state.current_project_name
+DATE_DU_JOUR = datetime.datetime.now().strftime("%d-%m-%Y")
 
 # --- Injection CSS ---
 st.markdown("""
@@ -187,22 +255,10 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-def clean_string(s):
-    if not s: return ""
-    return re.sub(r'\s+', '', str(s)).upper().strip()
-
 # ==========================================
-# 📁 GESTION SÉCURISÉE DES PROJETS (SAAS)
+# 6. MENU LATÉRAL - GESTION PROJETS
 # ==========================================
 st.sidebar.header("📁 Gestion des Projets")
-
-def fetch_project_list():
-    try:
-        response = supabase.table("projets").select("id, nom_projet").eq("entreprise_id", st.session_state.entreprise_id).execute()
-        return response.data  
-    except:
-        return []
-
 st.session_state.liste_projets_sauvegardes = fetch_project_list()
 projets_existants = st.session_state.liste_projets_sauvegardes
 
@@ -255,9 +311,6 @@ if st.sidebar.button("💾 SAUVEGARDER LES MODIFICATIONS", type="primary", use_c
             st.sidebar.success("Projet sauvegardé avec succès dans le cloud !")
         except: pass
 
-# ==========================================
-# FONCTIONS DE CALCUL ET INTERFACE 
-# ==========================================
 st.sidebar.markdown("---")
 st.sidebar.header("⚙️ Navigation")
 
@@ -266,57 +319,9 @@ menu_selection = st.sidebar.radio(
     ["📝 Saisie des Ouvrages", "📐 Fiche Atelier & Débit", "🪟 Carnet de Vitrage", "🛒 Quincaillerie & Joints", "🛠️ Gestionnaire de Bibliothèque", "🚧 Garde-corps (Barres 6m)"]
 )
 
-def safe_float(val, default=1.0):
-    try:
-        v = str(val).replace(',', '.').strip()
-        if not v or v == '-': return default
-        return float(v)
-    except: return default
-
-def evaluer_formule(formule, L, H, hC, nom_composant):
-    if not formule or str(formule).strip() in ["-", ""]: return 0.0
-    f = str(formule).replace('=', '').replace(',', '.').upper().strip()
-    f = f.replace('X', '*')
-    nom_comp_maj = str(nom_composant).upper()
-    if "H" in f:
-        if "COUVRE" in nom_comp_maj or "CJ" in nom_comp_maj: f = f.replace("H", str(H))
-        else: f = f.replace("H", f"({H} - {hC})")
-    if "L" in f: f = f.replace("L", str(L))
-    f = re.sub(r'[^0-9\+\-\*\/\(\)\.]', '', f)
-    try: return round(float(eval(f)), 1)
-    except: return 0.0
-
-def generer_reperes_auto(df):
-    c_f = 0; c_p = 0; c_pf = 0; c_o = 0
-    new_reperes = []
-    for idx, row in df.iterrows():
-        ouvr_raw = str(row.get("Ouvrage", "")).strip().upper()
-        if not ouvr_raw: new_reperes.append("")
-        elif ouvr_raw.startswith("PF"): c_pf += 1; new_reperes.append(f"PF{c_pf}")
-        elif ouvr_raw.startswith("P"): c_p += 1; new_reperes.append(f"P{c_p}")
-        elif ouvr_raw.startswith("F"): c_f += 1; new_reperes.append(f"F{c_f}")
-        else: c_o += 1; new_reperes.append(f"O{c_o}")
-    df_out = df.copy()
-    df_out["Repère"] = new_reperes
-    return df_out
-
-def optimize_cutting_1d_with_ref(cuts_list, bar_length=6000, blade_width=5):
-    cuts_sorted = sorted(cuts_list, key=lambda x: x['length'], reverse=True)
-    bars = []
-    for cut in cuts_sorted:
-        placed = False
-        for bar in bars:
-            occupied = sum(c['length'] for c in bar) + (len(bar) * blade_width)
-            if occupied + cut['length'] <= bar_length:
-                bar.append(cut)
-                placed = True
-                break
-        if not placed: bars.append([cut])
-    return bars
-
-NOM_PROJET = st.session_state.current_project_name
-DATE_DU_JOUR = datetime.datetime.now().strftime("%d-%m-%Y")
-
+# ==========================================
+# 7. ROUTAGE DES MODULES
+# ==========================================
 if menu_selection == "📝 Saisie des Ouvrages":
     st.markdown(f'<div class="section-header no-print">📝 Saisie des Ouvrages — {NOM_PROJET}</div>', unsafe_allow_html=True)
     global_gammes = sorted(list(set([str(x.get("Gamme", "")).strip() for x in BIBLIOTHEQUE if str(x.get("Gamme", "")).strip() != ""])))
