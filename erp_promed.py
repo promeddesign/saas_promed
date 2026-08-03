@@ -23,26 +23,18 @@ except Exception as e:
 # ==========================================
 # 🔐 GESTION DE L'AUTHENTIFICATION (MULTI-TENANT)
 # ==========================================
-for key in ["user", "access_token", "refresh_token", "entreprise_id", "user_nom", "nom_entreprise", "gammes_autorisees"]:
+for key in ["user", "access_token", "refresh_token", "entreprise_id", "user_nom", "nom_entreprise"]:
     if key not in st.session_state:
-        st.session_state[key] = None if key != "gammes_autorisees" else []
+        st.session_state[key] = None
 
 def fetch_entreprise_info(ent_id):
     try:
-        ent_res = supabase.table("entreprises").select("nom_entreprise, gammes_autorisees").eq("id", ent_id).execute()
+        ent_res = supabase.table("entreprises").select("nom_entreprise").eq("id", ent_id).execute()
         if ent_res.data:
-            nom = ent_res.data[0].get("nom_entreprise", "Inconnue")
-            gammes_brutes = ent_res.data[0].get("gammes_autorisees", "[]")
-            if isinstance(gammes_brutes, str):
-                try: gammes = json.loads(gammes_brutes)
-                except: gammes = []
-            else:
-                gammes = gammes_brutes if gammes_brutes else []
-            return nom, gammes
+            return ent_res.data[0].get("nom_entreprise", "Inconnue")
     except:
         pass
-    return "Inconnue", []
-
+    return "Inconnue"
 if st.session_state.access_token and st.session_state.refresh_token:
     try:
         supabase.auth.set_session(st.session_state.access_token, st.session_state.refresh_token)
@@ -53,9 +45,7 @@ if st.session_state.access_token and st.session_state.refresh_token:
                 if profile_res.data:
                     st.session_state.user_nom = profile_res.data[0].get("nom", "Utilisateur")
             
-            nom_ent, gammes = fetch_entreprise_info(st.session_state.entreprise_id)
-            st.session_state.nom_entreprise = nom_ent
-            st.session_state.gammes_autorisees = gammes
+           st.session_state.nom_entreprise = fetch_entreprise_info(st.session_state.entreprise_id)
     except:
         st.session_state.user = None 
 
@@ -63,7 +53,6 @@ def logout():
     supabase.auth.sign_out()
     for key in ["user", "access_token", "refresh_token", "entreprise_id", "user_nom", "nom_entreprise"]:
         st.session_state[key] = None
-    st.session_state.gammes_autorisees = []
     st.cache_data.clear() 
     st.rerun()
 
@@ -87,9 +76,7 @@ if st.session_state.user is None:
                 if profile_res.data:
                     st.session_state.entreprise_id = profile_res.data[0]["entreprise_id"]
                     st.session_state.user_nom = profile_res.data[0].get("nom", "Utilisateur")
-                    nom_ent, gammes = fetch_entreprise_info(st.session_state.entreprise_id)
-                    st.session_state.nom_entreprise = nom_ent
-                    st.session_state.gammes_autorisees = gammes
+                   st.session_state.nom_entreprise = fetch_entreprise_info(st.session_state.entreprise_id)
                     st.cache_data.clear() 
                     st.rerun()
                 else:
@@ -122,10 +109,10 @@ st.sidebar.markdown("---")
 # GESTION DES DONNÉES & CATALOGUE
 # ==========================================
 @st.cache_data(ttl=3600) 
-def load_app_library(entreprise_id, gammes_autorisees_liste):
+def load_app_library():
     try:
-        if not gammes_autorisees_liste: return []
-        response = supabase.table("bibliotheque_gammes").select("*").in_("gamme", gammes_autorisees_liste).execute()
+        # On interroge toute la table sans le filtre .in_()
+        response = supabase.table("bibliotheque_gammes").select("*").execute()
         legacy_data = []
         for item in response.data:
             legacy_data.append({
@@ -139,9 +126,8 @@ def load_app_library(entreprise_id, gammes_autorisees_liste):
     except Exception as e:
         return []
 
-mes_gammes = st.session_state.get("gammes_autorisees", [])
-mon_entreprise_id = st.session_state.get("entreprise_id", "inconnu")
-BIBLIOTHEQUE = load_app_library(mon_entreprise_id, mes_gammes)
+# L'appel est maintenant tout simple
+BIBLIOTHEQUE = load_app_library()
 PALETTE_COULEURS = ["#1E40AF", "#10B981", "#D97706", "#DC2626", "#7C3AED", "#0891B2", "#EC4899"]
 
 choix_gammes_dynamiques = sorted(list(set([str(x.get("Gamme", "")).strip() for x in BIBLIOTHEQUE if str(x.get("Gamme", "")).strip() != ""])))
