@@ -82,13 +82,13 @@ def get_default_df():
 
 def fetch_entreprise_info(ent_id):
     try:
+        # On interroge la table entreprises pour récupérer le nom
         ent_res = supabase.table("entreprises").select("nom_entreprise").eq("id", ent_id).execute()
-        if ent_res.data:
+        if ent_res.data and len(ent_res.data) > 0:
             return ent_res.data[0].get("nom_entreprise", "Inconnue")
-    except:
-        pass
+    except Exception as e:
+        print("Erreur fetch_entreprise_info:", e)
     return "Inconnue"
-
 def fetch_project_list():
     try:
         response = supabase.table("projets").select("id, nom_projet").eq("entreprise_id", st.session_state.entreprise_id).execute()
