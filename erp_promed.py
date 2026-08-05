@@ -147,18 +147,22 @@ if "df_garde_corps" not in st.session_state:
 if st.session_state.access_token and st.session_state.refresh_token:
     try:
         supabase.auth.set_session(st.session_state.access_token, st.session_state.refresh_token)
-        if st.session_state.entreprise_id and (not st.session_state.get('user_nom') or not st.session_state.get('nom_entreprise')):
+        
+        # CORRECTION : On vérifie si les infos sont manquantes, et on recharge TOUT depuis "profiles"
+        if not st.session_state.get('nom_entreprise') or not st.session_state.get('entreprise_id'):
             user_id = st.session_state.user.id if st.session_state.user else None
             if user_id:
-                profile_res = supabase.table("profiles").select("nom").eq("id", user_id).execute()
+                # On récupère le nom ET l'entreprise_id
+                profile_res = supabase.table("profiles").select("entreprise_id", "nom").eq("id", user_id).execute()
                 if profile_res.data:
+                    st.session_state.entreprise_id = profile_res.data[0].get("entreprise_id")
                     st.session_state.user_nom = profile_res.data[0].get("nom", "Utilisateur")
-            
-            # 🟢 CORRECTION : Alignement parfait avec le bloc "if" ci-dessus (12 espaces)
-            st.session_state.nom_entreprise = fetch_entreprise_info(st.session_state.entreprise_id)
+                    
+                    # Maintenant qu'on a l'ID, on va chercher le nom de l'entreprise
+                    if st.session_state.entreprise_id:
+                        st.session_state.nom_entreprise = fetch_entreprise_info(st.session_state.entreprise_id)
     except:
         st.session_state.user = None
-
 # --- Écran de connexion ---
 if st.session_state.user is None:
     st.markdown('<div class="main-title">🔐 Connexion OPTIALU</div>', unsafe_allow_html=True)
