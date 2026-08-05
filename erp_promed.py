@@ -270,7 +270,11 @@ projets_existants = st.session_state.liste_projets_sauvegardes
 nouveau_projet = st.sidebar.text_input("➕ Créer un nouveau projet :", placeholder="Ex: Villa Dupont")
 if st.sidebar.button("Créer ce projet", use_container_width=True):
     if nouveau_projet:
-        data_json = json.loads(st.session_state.chassis_rows_v27.to_json(orient="records", force_ascii=False))
+        # On sauvegarde les deux tableaux dans un seul objet JSON
+        chassis_json = json.loads(st.session_state.chassis_rows_v27.to_json(orient="records", force_ascii=False))
+        gc_json = json.loads(st.session_state.df_garde_corps.to_json(orient="records", force_ascii=False))
+        data_json = {"chassis": chassis_json, "garde_corps": gc_json}
+        
         try:
             response = supabase.table("projets").insert({
                 "user_id": st.session_state.user.id, "entreprise_id": st.session_state.entreprise_id, 
@@ -295,35 +299,51 @@ if st.sidebar.button("Charger ce projet", use_container_width=True):
         try:
             response = supabase.table("projets").select("donnees").eq("id", target_id).eq("entreprise_id", st.session_state.entreprise_id).execute()
             if response.data:
-                df_charge = pd.DataFrame(response.data[0]["donnees"])
+                raw_data = response.data[0]["donnees"]
+                
+                # Rétrocompatibilité : on vérifie si c'est l'ancien format (liste) ou le nouveau (dictionnaire)
+                if isinstance(raw_data, dict) and "chassis" in raw_data:
+                    df_charge = pd.DataFrame(raw_data["chassis"])
+                    df_gc_charge = pd.DataFrame(raw_data.get("garde_corps", []))
+                    if not df_gc_charge.empty:
+                        st.session_state.df_garde_corps = df_gc_charge
+                else:
+                    df_charge = pd.DataFrame(raw_data)
+                
                 if "Gamme" not in df_charge.columns: df_charge["Gamme"] = choix_gammes_dynamiques[0]
                 if "Série" not in df_charge.columns: df_charge["Série"] = choix_series_dynamiques[0]
                 colonnes_ordre = ["Repère", "Gamme", "Série", "Ouvrage", "Largeur (L)", "Hauteur (H)", "Qté", "Volet Roulant", "H Caisson", "Vitrage"]
                 df_charge = df_charge.reindex(columns=colonnes_ordre)
+                
                 st.session_state.chassis_rows_v27 = df_charge
                 st.session_state.current_project_name = projet_selectionne
                 st.session_state.current_project_id = target_id
                 st.rerun()
-        except: pass
+        except Exception as e: 
+            st.sidebar.error(f"Erreur de chargement: {e}")
 st.sidebar.markdown("---")
 
 st.sidebar.info(f"Projet actif : **{st.session_state.current_project_name}**")
 if st.sidebar.button("💾 SAUVEGARDER LES MODIFICATIONS", type="primary", use_container_width=True):
     if st.session_state.current_project_id is not None:
         try:
-            data_json = json.loads(st.session_state.chassis_rows_v27.to_json(orient="records", force_ascii=False))
+            chassis_json = json.loads(st.session_state.chassis_rows_v27.to_json(orient="records", force_ascii=False))
+            gc_json = json.loads(st.session_state.df_garde_corps.to_json(orient="records", force_ascii=False))
+            data_json = {"chassis": chassis_json, "garde_corps": gc_json}
+            
             supabase.table("projets").update({"donnees": data_json}).eq("id", st.session_state.current_project_id).eq("entreprise_id", st.session_state.entreprise_id).execute()
-            st.sidebar.success("Projet sauvegardé avec succès dans le cloud !")
-        except: pass
+            st.sidebar.success("Projet sauvegardé avec succès !")
+        except Exception as e: 
+            st.sidebar.error(f"Erreur de sauvegarde: {e}")
 
 st.sidebar.markdown("---")
 st.sidebar.header("⚙️ Navigation")
 
+# AJOUT DU NOUVEAU MODULE ICI
 menu_selection = st.sidebar.radio(
     "Modules :",
-    ["📝 Saisie des Ouvrages", "📐 Fiche Atelier & Débit", "🪟 Carnet de Vitrage", "🛒 Quincaillerie & Joints", "🛠️ Gestionnaire de Bibliothèque", "🚧 Garde-corps (Barres 6m)"]
+    ["📝 Saisie des Ouvrages", "📐 Fiche Atelier & Débit", "🪟 Carnet de Vitrage", "🛒 Quincaillerie & Joints", "🏠 Volets Roulants", "🛠️ Gestionnaire de Bibliothèque", "🚧 Garde-corps (Barres 6m)"]
 )
-
 # ==========================================
 # 7. ROUTAGE DES MODULES
 # ==========================================
@@ -748,6 +768,120 @@ elif menu_selection == "🛒 Quincaillerie & Joints":
                 html_joints += f'<tr><td>{j["Série"]}</td><td>{j["Référence"]}</td><td>{j["Désignation"]}</td><td class="center-text" style="font-weight:bold;">{j["Quantité Totale (m)"]:.2f} m</td></tr>'
             html_joints += '</tbody></table>'
             st.markdown(html_joints.replace('\n', ''), unsafe_allow_html=True)
+elif menu_selection == "🏠 Volets Roulants":
+    st.markdown('<div class="section-header no-print">🏠 Module Volets Roulants</div>', unsafe_allow_html=True)
+    st.write("Ce module détecte automatiquement les ouvrages de votre projet ayant un volet roulant et calcule les débits des lames.")
+
+    # Paramètres globaux avec la case pour le jeu des coulisses
+    st.markdown("### ⚙️ Paramètres du Tablier")
+    col1, col2, col3, col4, col5 = st.columns(5)
+    with col1: hauteur_lame = st.number_input("Hauteur lame (mm)", value=43.0, step=1.0)
+    with col2: type_lame = st.selectbox("Type de lame", ["Injectée", "Extrudée"])
+    with col3: jeu_coulisses = st.number_input("Jeu coulisses (mm)", value=0.0, step=1.0, help="Valeur à soustraire de la largeur L (ex: déduction pour les coulisses)")
+    with col4: longueur_barre_vr = st.number_input("Lg barre lame (mm)", value=5500, step=100)
+    with col5: epaisseur_scie_vr = st.number_input("Trait scie (mm)", value=5, step=1)
+
+    df_projet = st.session_state.chassis_rows_v27
+    df_volets = df_projet[df_projet["Volet Roulant"].str.lower() != "non"]
+    df_volets = df_volets.dropna(subset=["Volet Roulant"])
+
+    if df_volets.empty:
+        st.info("ℹ️ Aucun volet roulant n'a été détecté dans la saisie des ouvrages de ce projet.")
+    else:
+        st.markdown('<div class="excel-head-blue">📝 Détail des Tabliers à Fabriquer</div>', unsafe_allow_html=True)
+        
+        lames_a_couper = []
+        details_tabliers = []
+
+        for idx, row in df_volets.iterrows():
+            repere = str(row.get("Repère", f"V{idx}"))
+            type_vr = str(row.get("Volet Roulant", "")).lower()
+            L = float(row.get("Largeur (L)", 0))
+            H = float(row.get("Hauteur (H)", 0))
+            qte_chassis = int(row.get("Qté", 1))
+            h_caisson = float(row.get("H Caisson", 0))
+
+            # Calcul de la largeur de la lame (L - jeu)
+            largeur_lame = max(0.0, L - jeu_coulisses)
+
+            # Calcul de la hauteur du tablier
+            if "tunnel" in type_vr:
+                h_tablier = H + h_caisson
+            else: # monobloc ou autre
+                h_tablier = H
+            
+            import math
+            nb_lames_par_tablier = math.ceil(h_tablier / hauteur_lame)
+            nb_lames_total = nb_lames_par_tablier * qte_chassis
+
+            # Option Kit moteur
+            kit_moteur = st.checkbox(f"Kit Moteur pour {repere} ({qte_chassis}x)", value=True, key=f"moteur_{repere}")
+
+            details_tabliers.append({
+                "Repère": repere,
+                "Type": type_vr.capitalize(),
+                "Largeur Lame (mm)": largeur_lame,
+                "Hauteur Tablier (mm)": h_tablier,
+                "Lames / volet": nb_lames_par_tablier,
+                "Qté Volets": qte_chassis,
+                "Total Lames": nb_lames_total,
+                "Kit Moteur": "Oui" if kit_moteur else "Non"
+            })
+
+            for _ in range(nb_lames_total):
+                lames_a_couper.append({"ref": repere, "length": largeur_lame})
+
+        st.table(pd.DataFrame(details_tabliers))
+
+        st.markdown("---")
+        st.markdown('<div class="excel-head-yellow">✂️ Optimisation de Coupe des Lames (5.5m)</div>', unsafe_allow_html=True)
+        
+        if st.button("🚀 Calculer le débit des barres", type="primary"):
+            if lames_a_couper:
+                barres_optimisees = optimize_cutting_1d_with_ref(lames_a_couper, longueur_barre_vr, epaisseur_scie_vr)
+                
+                grouped_bars_vr = []
+                for bar in barres_optimisees:
+                    matched = False
+                    for gb in grouped_bars_vr:
+                        if len(bar) == len(gb['pieces']):
+                            is_identical = True
+                            for p1, p2 in zip(bar, gb['pieces']):
+                                if p1['length'] != p2['length'] or p1['ref'] != p2['ref']:
+                                    is_identical = False; break
+                            if is_identical: gb['qty'] += 1; matched = True; break
+                    if not matched: grouped_bars_vr.append({'pieces': bar, 'qty': 1})
+
+                html_vr = f'<table class="print-table" style="width: 100%;"><thead><tr><th style="width: 15%;">LAMES ({type_lame})</th><th style="width: 55%; text-align: center;">PLAN DE COUPE</th><th style="width: 10%; text-align: center;">QTÉ BARRES</th><th style="width: 10%; text-align: center;">CHUTE (mm)</th><th style="width: 10%; text-align: center;">PERTE %</th></tr></thead><tbody>'
+                
+                refs_uniques_vr = list(set([c["ref"] for c in lames_a_couper]))
+                map_couleurs_vr = {ref: PALETTE_COULEURS[i % len(PALETTE_COULEURS)] for i, ref in enumerate(refs_uniques_vr)}
+                
+                total_barres_vr = 0
+                for gb in grouped_bars_vr:
+                    bar = gb['pieces']
+                    qty = gb['qty']
+                    total_barres_vr += qty
+                    
+                    used_in_bar = sum(c['length'] for c in bar)
+                    bar_blade_loss = (len(bar) - 1) * epaisseur_scie_vr if len(bar) > 1 else 0
+                    chute_bar = longueur_barre_vr - used_in_bar - bar_blade_loss
+                    chute_pct = (chute_bar / longueur_barre_vr) * 100
+
+                    html_barre_div = '<div class="bar-container">'
+                    for cut in bar:
+                        pct_largeur = ((cut['length'] + epaisseur_scie_vr) / longueur_barre_vr) * 100
+                        couleur = map_couleurs_vr.get(cut['ref'], "#1E40AF")
+                        html_barre_div += f'<div class="bar-segment" style="width: {pct_largeur}%; background-color: {couleur};" title="{cut["ref"]} - {cut["length"]} mm">{int(cut["length"])}</div>'
+                    if chute_pct > 0: html_barre_div += f'<div class="bar-chute" style="width: {chute_pct}%;"></div>'
+                    html_barre_div += '</div>'
+
+                    html_vr += f'<tr><td style="font-weight: bold;">Barre 5.5m</td><td style="padding: 10px;">{html_barre_div}</td><td class="center-text" style="font-weight: bold; font-size: 15px;">{qty}</td><td class="center-text">{int(chute_bar)}</td><td class="center-text">{chute_pct:.1f}%</td></tr>'
+                
+                html_vr += f'<tr style="background-color: #DBEAFE; font-weight: bold;"><td colspan="2" style="text-align: right;">TOTAL BARRES À COMMANDER :</td><td class="center-text">{total_barres_vr}</td><td colspan="2"></td></tr>'
+                html_vr += "</tbody></table>"
+                
+                st.markdown(html_vr, unsafe_allow_html=True)
 
 elif menu_selection == "🛠️ Gestionnaire de Bibliothèque":
     st.markdown('<div class="section-header no-print">🛠️ Catalogue Actuel Emporté</div>', unsafe_allow_html=True)
