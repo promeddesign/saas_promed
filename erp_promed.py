@@ -154,9 +154,10 @@ if st.session_state.access_token and st.session_state.refresh_token:
                 if profile_res.data:
                     st.session_state.user_nom = profile_res.data[0].get("nom", "Utilisateur")
             
-          st.session_state.nom_entreprise = fetch_entreprise_info(st.session_state.entreprise_id)
+            # 🟢 CORRECTION : Alignement parfait avec le bloc "if" ci-dessus (12 espaces)
+            st.session_state.nom_entreprise = fetch_entreprise_info(st.session_state.entreprise_id)
     except:
-        st.session_state.user = None 
+        st.session_state.user = None
 
 # --- Écran de connexion ---
 if st.session_state.user is None:
