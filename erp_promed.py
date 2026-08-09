@@ -159,6 +159,10 @@ if "df_garde_corps" not in st.session_state:
         {"Emplacement / Réf": "Terrasse Étage", "Longueur (mm)": 1800, "Quantité": 1},
         {"Emplacement / Réf": "Escalier", "Longueur (mm)": 950, "Quantité": 5}
     ])
+# --- NOUVEAU : Variables pour le devis global ---
+for key in ["total_alu", "total_vitrage", "total_accessoires", "total_volets", "total_gardecorps"]:
+    if key not in st.session_state:
+        st.session_state[key] = 0.0
 
 # ==========================================
 # 4. GESTION DE L'AUTHENTIFICATION
@@ -371,9 +375,10 @@ menu_selection = st.sidebar.radio(
         "🪟 Carnet de Vitrage", 
         "🛒 Quincaillerie & Joints", 
         "🏠 Volets Roulants", 
+        "🚧 Garde-corps (Barres 6m)",
         "🛠️ Gestionnaire de Bibliothèque", 
-        "💰 Mes Prix Unitaires",   # <-- NOUVEAU MODULE AJOUTÉ ICI
-        "🚧 Garde-corps (Barres 6m)"
+        "💰 Mes Prix Unitaires",
+        "📊 Devis Global du Projet"  # <-- NOUVEAU MODULE AJOUTÉ ICI
     ]
 )
 # ==========================================
@@ -694,7 +699,16 @@ elif menu_selection == "🪟 Carnet de Vitrage":
         st.markdown(f'<div class="projet-title">PROJET : {NOM_PROJET}</div>', unsafe_allow_html=True)
         st.markdown('<div class="excel-head-blue">🪟 CARNET DE VITRAGE (COMMANDE MIROITIER)</div>', unsafe_allow_html=True)
         
-        if list_vitrages:
+       if list_vitrages:
+            # --- NOUVEAU : Calcul du prix du vitrage ---
+            st.session_state.total_vitrage = 0.0
+            for v in list_vitrages:
+                type_vitre = str(v["Type Vitrage"]).strip().upper()
+                pu_vitre = st.session_state.prix_entreprise.get(type_vitre, 0.0) 
+                v["Prix Total (DA)"] = v["Surf. Totale (m²)"] * pu_vitre
+                st.session_state.total_vitrage += v["Prix Total (DA)"]
+            # ------------------------------------------
+
             df_vitrage = pd.DataFrame(list_vitrages)
             surface_projet_totale = df_vitrage["Surf. Totale (m²)"].sum()
             html_vitrage = '<table class="print-table" style="width: 100%;"><thead><tr><th>Repère</th><th>Ouvrage</th><th>Détail Vitre</th><th>Type Vitrage</th><th class="center-text">Largeur (mm)</th><th class="center-text">Hauteur (mm)</th><th class="center-text">Qté</th><th class="center-text">Surf. U. (m²)</th><th class="center-text">Surf. Totale (m²)</th></tr></thead><tbody>'
@@ -825,6 +839,15 @@ elif menu_selection == "🏠 Volets Roulants":
         lames_a_couper = []
         details_tabliers = []
 
+        # --- NOUVEAU : Récupération des prix Volets ---
+        st.session_state.total_volets = 0.0
+        pu_lame = st.session_state.prix_entreprise.get("LAME", 0.0)
+        pu_moteur = st.session_state.prix_entreprise.get("MOTEUR", 0.0)
+        pu_acc_vr = st.session_state.prix_entreprise.get("ACC_VR", 0.0)
+        # ----------------------------------------------
+
+        for idx, row in df_volets.iterrows():
+
         for idx, row in df_volets.iterrows():
             repere = str(row.get("Repère", f"V{idx}"))
             type_vr = str(row.get("Volet Roulant", "")).lower()
@@ -862,6 +885,13 @@ elif menu_selection == "🏠 Volets Roulants":
 
             for _ in range(nb_lames_total):
                 lames_a_couper.append({"ref": repere, "length": largeur_lame})
+# --- NOUVEAU : Calcul total Volets ---
+        for t in details_tabliers:
+            cost_lames = (t["Total Lames"] * t["Largeur Lame (mm)"] / 1000.0) * pu_lame
+            cost_moteur = t["Qté Volets"] * pu_moteur if t["Kit Moteur"] == "Oui" else 0
+            cost_acc = t["Qté Volets"] * pu_acc_vr
+            st.session_state.total_volets += (cost_lames + cost_moteur + cost_acc)
+        # -------------------------------------
 
         st.table(pd.DataFrame(details_tabliers))
 
@@ -1165,3 +1195,35 @@ elif menu_selection == "💰 Mes Prix Unitaires":
                 
             except Exception as e:
                 st.error(f"🔴 Erreur lors de la sauvegarde : {e}")
+# ==========================================
+# 📊 NOUVEAU MODULE : DEVIS GLOBAL
+# ==========================================
+elif menu_selection == "📊 Devis Global du Projet":
+    st.markdown('<div class="section-header">📊 Synthèse Financière du Projet</div>', unsafe_allow_html=True)
+    
+    # Calcul du total global
+    grand_total = (st.session_state.total_alu + st.session_state.total_vitrage + 
+                   st.session_state.total_accessoires + st.session_state.total_volets + 
+                   st.session_state.total_gardecorps)
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.markdown("### 📝 Détail par Catégorie")
+        data_devis = [
+            {"Catégorie": "Profilés Aluminium", "Montant (DA)": f"{st.session_state.total_alu:,.2f}"},
+            {"Catégorie": "Vitrages & Miroiterie", "Montant (DA)": f"{st.session_state.total_vitrage:,.2f}"},
+            {"Catégorie": "Accessoires & Joints", "Montant (DA)": f"{st.session_state.total_accessoires:,.2f}"},
+            {"Catégorie": "Volets Roulants", "Montant (DA)": f"{st.session_state.total_volets:,.2f}"},
+            {"Catégorie": "Garde-corps", "Montant (DA)": f"{st.session_state.total_gardecorps:,.2f}"},
+        ]
+        st.dataframe(pd.DataFrame(data_devis), use_container_width=True, hide_index=True)
+        
+    with col2:
+        st.markdown("### 💰 Total HT")
+        st.markdown(f"""
+            <div style="background-color:#1E3A8A; color:white; padding:20px; border-radius:10px; text-align:center;">
+                <span style="font-size:18px;">MONTANT TOTAL DU PROJET</span><br>
+                <span style="font-size:32px; font-weight:bold;">{grand_total:,.2f} DA</span>
+            </div>
+        """, unsafe_allow_html=True)
