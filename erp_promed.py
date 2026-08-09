@@ -82,13 +82,13 @@ def get_default_df():
 
 def fetch_entreprise_info(ent_id):
     try:
-        # On interroge la table entreprises pour récupérer le nom
         ent_res = supabase.table("entreprises").select("nom_entreprise").eq("id", ent_id).execute()
         if ent_res.data and len(ent_res.data) > 0:
             return ent_res.data[0].get("nom_entreprise", "Inconnue")
     except Exception as e:
         print("Erreur fetch_entreprise_info:", e)
     return "Inconnue"
+
 def fetch_project_list():
     try:
         response = supabase.table("projets").select("id, nom_projet").eq("entreprise_id", st.session_state.entreprise_id).execute()
@@ -99,7 +99,6 @@ def fetch_project_list():
 @st.cache_data(ttl=3600) 
 def load_app_library():
     try:
-        # On interroge toute la table sans restriction
         response = supabase.table("bibliotheque_gammes").select("*").execute()
         legacy_data = []
         for item in response.data:
@@ -114,32 +113,27 @@ def load_app_library():
     except Exception as e:
         return []
 
+def load_user_prices(entreprise_id):
+    prix_dict = {}
+    if not entreprise_id:
+        return prix_dict
+    try:
+        res = supabase.table("prix_unitaires").select("ref_composant, prix_unitaire").eq("entreprise_id", entreprise_id).execute()
+        for item in res.data:
+            ref = str(item.get("ref_composant", "")).strip().upper()
+            if ref:
+                prix_dict[ref] = float(item.get("prix_unitaire", 0.0))
+    except Exception as e:
+        print("Erreur chargement prix:", e)
+    return prix_dict
+
 def logout():
     supabase.auth.sign_out()
     for key in ["user", "access_token", "refresh_token", "entreprise_id", "user_nom", "nom_entreprise"]:
         st.session_state[key] = None
     st.cache_data.clear() 
     st.rerun()
-def load_user_prices(entreprise_id):
-    """
-    Récupère les prix spécifiques de l'entreprise.
-    Clé : "Ref", Valeur : Prix
-    """
-    prix_dict = {}
-    if not entreprise_id:
-        return prix_dict
-        
-    try:
-        res = supabase.table("prix_unitaires").select("ref_composant, prix_unitaire").eq("entreprise_id", entreprise_id).execute()
-        for item in res.data:
-            # On utilise uniquement la référence (en majuscule pour éviter les erreurs de casse)
-            ref = str(item.get("ref_composant", "")).strip().upper()
-            if ref:
-                prix_dict[ref] = float(item.get("prix_unitaire", 0.0))
-    except Exception as e:
-        print("Erreur chargement prix:", e)
-        
-    return prix_dict
+
 # ==========================================
 # 3. INITIALISATION DES VARIABLES DE SESSION
 # ==========================================
@@ -159,7 +153,8 @@ if "df_garde_corps" not in st.session_state:
         {"Emplacement / Réf": "Terrasse Étage", "Longueur (mm)": 1800, "Quantité": 1},
         {"Emplacement / Réf": "Escalier", "Longueur (mm)": 950, "Quantité": 5}
     ])
-# --- NOUVEAU : Variables pour le devis global ---
+
+# --- Variables pour le Devis Global ---
 for key in ["total_alu", "total_vitrage", "total_accessoires", "total_volets", "total_gardecorps"]:
     if key not in st.session_state:
         st.session_state[key] = 0.0
@@ -170,23 +165,18 @@ for key in ["total_alu", "total_vitrage", "total_accessoires", "total_volets", "
 if st.session_state.access_token and st.session_state.refresh_token:
     try:
         supabase.auth.set_session(st.session_state.access_token, st.session_state.refresh_token)
-        
-        # CORRECTION : On vérifie si les infos sont manquantes, et on recharge TOUT depuis "profiles"
         if not st.session_state.get('nom_entreprise') or not st.session_state.get('entreprise_id'):
             user_id = st.session_state.user.id if st.session_state.user else None
             if user_id:
-                # On récupère le nom ET l'entreprise_id
                 profile_res = supabase.table("profiles").select("entreprise_id", "nom").eq("id", user_id).execute()
                 if profile_res.data:
                     st.session_state.entreprise_id = profile_res.data[0].get("entreprise_id")
                     st.session_state.user_nom = profile_res.data[0].get("nom", "Utilisateur")
-                    
-                    # Maintenant qu'on a l'ID, on va chercher le nom de l'entreprise
                     if st.session_state.entreprise_id:
                         st.session_state.nom_entreprise = fetch_entreprise_info(st.session_state.entreprise_id)
     except:
         st.session_state.user = None
-# --- Écran de connexion ---
+
 if st.session_state.user is None:
     st.markdown('<div class="main-title">🔐 Connexion OPTIALU</div>', unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -239,10 +229,9 @@ st.sidebar.button("🚪 Se déconnecter", on_click=logout, use_container_width=T
 st.sidebar.markdown("---")
 
 BIBLIOTHEQUE = load_app_library()
-
-# NOUVEAU : Chargement des prix de l'entreprise connectée
 if "prix_entreprise" not in st.session_state:
     st.session_state.prix_entreprise = load_user_prices(st.session_state.entreprise_id)
+
 PALETTE_COULEURS = ["#1E40AF", "#10B981", "#D97706", "#DC2626", "#7C3AED", "#0891B2", "#EC4899"]
 
 choix_gammes_dynamiques = sorted(list(set([str(x.get("Gamme", "")).strip() for x in BIBLIOTHEQUE if str(x.get("Gamme", "")).strip() != ""])))
@@ -256,7 +245,7 @@ if not choix_types_dynamiques: choix_types_dynamiques = ["-"]
 NOM_PROJET = st.session_state.current_project_name
 DATE_DU_JOUR = datetime.datetime.now().strftime("%d-%m-%Y")
 
-# --- Injection CSS ---
+# --- CSS ---
 st.markdown("""
     <style>
     .main-title { font-size:24px !important; font-weight: bold; color: #1E3A8A; margin-bottom: 20px; text-align: center; border-bottom: 3px solid #1E3A8A; padding-bottom: 10px;}
@@ -297,11 +286,9 @@ projets_existants = st.session_state.liste_projets_sauvegardes
 nouveau_projet = st.sidebar.text_input("➕ Créer un nouveau projet :", placeholder="Ex: Villa Dupont")
 if st.sidebar.button("Créer ce projet", use_container_width=True):
     if nouveau_projet:
-        # On sauvegarde les deux tableaux dans un seul objet JSON
         chassis_json = json.loads(st.session_state.chassis_rows_v27.to_json(orient="records", force_ascii=False))
         gc_json = json.loads(st.session_state.df_garde_corps.to_json(orient="records", force_ascii=False))
         data_json = {"chassis": chassis_json, "garde_corps": gc_json}
-        
         try:
             response = supabase.table("projets").insert({
                 "user_id": st.session_state.user.id, "entreprise_id": st.session_state.entreprise_id, 
@@ -327,8 +314,6 @@ if st.sidebar.button("Charger ce projet", use_container_width=True):
             response = supabase.table("projets").select("donnees").eq("id", target_id).eq("entreprise_id", st.session_state.entreprise_id).execute()
             if response.data:
                 raw_data = response.data[0]["donnees"]
-                
-                # Rétrocompatibilité : on vérifie si c'est l'ancien format (liste) ou le nouveau (dictionnaire)
                 if isinstance(raw_data, dict) and "chassis" in raw_data:
                     df_charge = pd.DataFrame(raw_data["chassis"])
                     df_gc_charge = pd.DataFrame(raw_data.get("garde_corps", []))
@@ -357,7 +342,6 @@ if st.sidebar.button("💾 SAUVEGARDER LES MODIFICATIONS", type="primary", use_c
             chassis_json = json.loads(st.session_state.chassis_rows_v27.to_json(orient="records", force_ascii=False))
             gc_json = json.loads(st.session_state.df_garde_corps.to_json(orient="records", force_ascii=False))
             data_json = {"chassis": chassis_json, "garde_corps": gc_json}
-            
             supabase.table("projets").update({"donnees": data_json}).eq("id", st.session_state.current_project_id).eq("entreprise_id", st.session_state.entreprise_id).execute()
             st.sidebar.success("Projet sauvegardé avec succès !")
         except Exception as e: 
@@ -366,7 +350,6 @@ if st.sidebar.button("💾 SAUVEGARDER LES MODIFICATIONS", type="primary", use_c
 st.sidebar.markdown("---")
 st.sidebar.header("⚙️ Navigation")
 
-# AJOUT DU NOUVEAU MODULE ICI
 menu_selection = st.sidebar.radio(
     "Modules :",
     [
@@ -378,9 +361,10 @@ menu_selection = st.sidebar.radio(
         "🚧 Garde-corps (Barres 6m)",
         "🛠️ Gestionnaire de Bibliothèque", 
         "💰 Mes Prix Unitaires",
-        "📊 Devis Global du Projet"  # <-- NOUVEAU MODULE AJOUTÉ ICI
+        "📊 Devis Global du Projet"
     ]
 )
+
 # ==========================================
 # 7. ROUTAGE DES MODULES
 # ==========================================
@@ -472,9 +456,7 @@ elif menu_selection == "📐 Fiche Atelier & Débit":
     col1, col2 = st.columns(2)
     with col1: LONGUEUR_BRUTE = st.number_input("Longueur brute de barre (mm)", value=6500)
     with col2: EPAISSEUR_SCIE = st.number_input("Trait de scie (mm)", value=5)
-    st.markdown('<div class="no-print" style="margin-top: 20px;">', unsafe_allow_html=True)
     btn_generer = st.button("⚡ GENERER LES PARCELLES COLORÉES", type="primary", use_container_width=True)
-    st.markdown('</div>', unsafe_allow_html=True)
 
     if btn_generer:
         edited_project = st.session_state.chassis_rows_v27
@@ -526,8 +508,6 @@ elif menu_selection == "📐 Fiche Atelier & Débit":
 
         if match_trouve:
             st.markdown('<div class="section-header no-print">📐 Visualisation Documents d\'Atelier</div>', unsafe_allow_html=True)
-            
-            # --- IMPRESSION AVEC NOM CUSTOM ---
             titre_pdf = f"{NOM_PROJET}_Fiche_Atelier_{DATE_DU_JOUR}".replace(" ", "_").replace("'", "")
             components.html(f"""
                 <button onclick="
@@ -606,11 +586,18 @@ elif menu_selection == "📐 Fiche Atelier & Débit":
                 html_coupes += f'<tr style="background-color: #F9FAFB; font-weight: bold; border-bottom: 2px solid #D1D5DB;"><td>TOTAL {ref}</td><td colspan="5">{total_barres_pour_ref} Barre(s) ({serie.upper()}) de {int(LONGUEUR_BRUTE)} mm</td></tr>'
             html_coupes += "</tbody></table>"
             st.markdown(html_coupes.replace('\n', ''), unsafe_allow_html=True)
+            
             st.markdown('<div class="block-spacer"></div>', unsafe_allow_html=True)
             st.markdown('<div class="excel-head-green">📦 RÉCAPITULATIF DE COMMANDE DES PROFILÉS</div>', unsafe_allow_html=True)
             html_recap = '<table class="print-table" style="width: 50%;"><thead><tr><th>Gamme / Série</th><th>Référence Alu</th><th class="center-text">Total de barres (' + str(LONGUEUR_BRUTE/1000) + 'm)</th></tr></thead><tbody>'
+            
+            # --- CALCUL DU DEVIS ALU ---
+            st.session_state.total_alu = 0.0
             for (serie, ref), qte_b in dict_total_barres_achetees.items():
                 html_recap += f"<tr><td>{serie}</td><td>{ref}</td><td class='center-text' style='font-weight: bold;'>{qte_b}</td></tr>"
+                pu_barre = st.session_state.prix_entreprise.get(ref, 0.0)
+                st.session_state.total_alu += (qte_b * pu_barre)
+            # ---------------------------
             html_recap += "</tbody></table>"
             st.markdown(html_recap.replace('\n', ''), unsafe_allow_html=True)
         else:
@@ -618,9 +605,7 @@ elif menu_selection == "📐 Fiche Atelier & Débit":
 
 elif menu_selection == "🪟 Carnet de Vitrage":
     st.markdown('<div class="section-header no-print">🪟 Carnet de Vitrage (Miroitier)</div>', unsafe_allow_html=True)
-    st.markdown('<div class="no-print" style="margin-top: 10px; margin-bottom: 20px;">', unsafe_allow_html=True)
     btn_calculer_vitrage = st.button("🔄 CALCULER LES VITRAGES", type="primary", use_container_width=True)
-    st.markdown('</div>', unsafe_allow_html=True)
 
     if btn_calculer_vitrage:
         edited_project = st.session_state.chassis_rows_v27
@@ -683,7 +668,6 @@ elif menu_selection == "🪟 Carnet de Vitrage":
                         "Surf. U. (m²)": round(surf_u, 2), "Surf. Totale (m²)": round(surf_tot, 2)
                     })
 
-        # --- IMPRESSION AVEC NOM CUSTOM ---
         titre_pdf = f"{NOM_PROJET}_Vitrage_{DATE_DU_JOUR}".replace(" ", "_").replace("'", "")
         components.html(f"""
             <button onclick="
@@ -699,22 +683,22 @@ elif menu_selection == "🪟 Carnet de Vitrage":
         st.markdown(f'<div class="projet-title">PROJET : {NOM_PROJET}</div>', unsafe_allow_html=True)
         st.markdown('<div class="excel-head-blue">🪟 CARNET DE VITRAGE (COMMANDE MIROITIER)</div>', unsafe_allow_html=True)
         
-       if list_vitrages:
-            # --- NOUVEAU : Calcul du prix du vitrage ---
+        if list_vitrages:
+            # --- CALCUL DU DEVIS VITRAGE ---
             st.session_state.total_vitrage = 0.0
             for v in list_vitrages:
                 type_vitre = str(v["Type Vitrage"]).strip().upper()
-                pu_vitre = st.session_state.prix_entreprise.get(type_vitre, 0.0) 
+                pu_vitre = st.session_state.prix_entreprise.get(type_vitre, 0.0)
                 v["Prix Total (DA)"] = v["Surf. Totale (m²)"] * pu_vitre
                 st.session_state.total_vitrage += v["Prix Total (DA)"]
-            # ------------------------------------------
-
+            # -------------------------------
+            
             df_vitrage = pd.DataFrame(list_vitrages)
             surface_projet_totale = df_vitrage["Surf. Totale (m²)"].sum()
-            html_vitrage = '<table class="print-table" style="width: 100%;"><thead><tr><th>Repère</th><th>Ouvrage</th><th>Détail Vitre</th><th>Type Vitrage</th><th class="center-text">Largeur (mm)</th><th class="center-text">Hauteur (mm)</th><th class="center-text">Qté</th><th class="center-text">Surf. U. (m²)</th><th class="center-text">Surf. Totale (m²)</th></tr></thead><tbody>'
+            html_vitrage = '<table class="print-table" style="width: 100%;"><thead><tr><th>Repère</th><th>Ouvrage</th><th>Détail Vitre</th><th>Type Vitrage</th><th class="center-text">Largeur (mm)</th><th class="center-text">Hauteur (mm)</th><th class="center-text">Qté</th><th class="center-text">Surf. Totale (m²)</th><th class="center-text">Prix Total (DA)</th></tr></thead><tbody>'
             for idx, v in df_vitrage.iterrows():
-                html_vitrage += f'<tr><td><b>{v["Repère"]}</b></td><td>{v["Ouvrage"]}</td><td>{v["Désignation"]}</td><td>{v["Type Vitrage"]}</td><td class="center-text" style="color: #1E40AF; font-weight:bold;">{v["Largeur (mm)"]}</td><td class="center-text" style="color: #DC2626; font-weight:bold;">{v["Hauteur (mm)"]}</td><td class="center-text" style="font-weight:bold; font-size:15px;">{v["Qté"]}</td><td class="center-text">{v["Surf. U. (m²)"]:.2f}</td><td class="center-text">{v["Surf. Totale (m²)"]:.2f}</td></tr>'
-            html_vitrage += f'<tr style="background-color: #DBEAFE; font-weight: bold;"><td colspan="8" style="text-align: right;">SURFACE TOTALE VITRAGE :</td><td class="center-text">{surface_projet_totale:.2f} m²</td></tr>'
+                html_vitrage += f'<tr><td><b>{v["Repère"]}</b></td><td>{v["Ouvrage"]}</td><td>{v["Désignation"]}</td><td>{v["Type Vitrage"]}</td><td class="center-text" style="color: #1E40AF; font-weight:bold;">{v["Largeur (mm)"]}</td><td class="center-text" style="color: #DC2626; font-weight:bold;">{v["Hauteur (mm)"]}</td><td class="center-text" style="font-weight:bold; font-size:15px;">{v["Qté"]}</td><td class="center-text">{v["Surf. Totale (m²)"]:.2f}</td><td class="center-text">{v["Prix Total (DA)"]:.2f}</td></tr>'
+            html_vitrage += f'<tr style="background-color: #DBEAFE; font-weight: bold;"><td colspan="7" style="text-align: right;">TOTAL GLOBAL VITRAGE :</td><td class="center-text">{surface_projet_totale:.2f} m²</td><td class="center-text">{st.session_state.total_vitrage:.2f} DA</td></tr>'
             html_vitrage += '</tbody></table>'
             st.markdown(html_vitrage.replace('\n', ''), unsafe_allow_html=True)
         else:
@@ -722,9 +706,7 @@ elif menu_selection == "🪟 Carnet de Vitrage":
 
 elif menu_selection == "🛒 Quincaillerie & Joints":
     st.markdown('<div class="section-header no-print">🛒 Quincaillerie & Joints (Accessoires)</div>', unsafe_allow_html=True)
-    st.markdown('<div class="no-print" style="margin-top: 10px; margin-bottom: 20px;">', unsafe_allow_html=True)
     btn_calculer_acc = st.button("🔄 CALCULER LES BESOINS", type="primary", use_container_width=True)
-    st.markdown('</div>', unsafe_allow_html=True)
 
     if btn_calculer_acc:
         edited_project = st.session_state.chassis_rows_v27
@@ -766,7 +748,19 @@ elif menu_selection == "🛒 Quincaillerie & Joints":
                             })
                             list_accessoires.append({"Série": serie, "Référence": ref_comp, "Désignation": designation, "Quantité": total_qty})
 
-        # --- IMPRESSION AVEC NOM CUSTOM ---
+        # --- CALCUL DU DEVIS ACCESSOIRES ---
+        st.session_state.total_accessoires = 0.0
+        for acc in list_accessoires:
+            ref = str(acc["Référence"]).strip().upper()
+            pu_acc = st.session_state.prix_entreprise.get(ref, 0.0)
+            st.session_state.total_accessoires += acc["Quantité"] * pu_acc
+            
+        for j in list_joints:
+            ref = str(j["Référence"]).strip().upper()
+            pu_j = st.session_state.prix_entreprise.get(ref, 0.0)
+            st.session_state.total_accessoires += j["Quantité Totale (m)"] * pu_j
+        # -----------------------------------
+
         titre_pdf = f"{NOM_PROJET}_Quincaillerie_{DATE_DU_JOUR}".replace(" ", "_").replace("'", "")
         components.html(f"""
             <button onclick="
@@ -814,16 +808,15 @@ elif menu_selection == "🛒 Quincaillerie & Joints":
                 html_joints += f'<tr><td>{j["Série"]}</td><td>{j["Référence"]}</td><td>{j["Désignation"]}</td><td class="center-text" style="font-weight:bold;">{j["Quantité Totale (m)"]:.2f} m</td></tr>'
             html_joints += '</tbody></table>'
             st.markdown(html_joints.replace('\n', ''), unsafe_allow_html=True)
+
 elif menu_selection == "🏠 Volets Roulants":
     st.markdown('<div class="section-header no-print">🏠 Module Volets Roulants</div>', unsafe_allow_html=True)
-    st.write("Ce module détecte automatiquement les ouvrages de votre projet ayant un volet roulant et calcule les débits des lames.")
-
-    # Paramètres globaux avec la case pour le jeu des coulisses
+    
     st.markdown("### ⚙️ Paramètres du Tablier")
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1: hauteur_lame = st.number_input("Hauteur lame (mm)", value=43.0, step=1.0)
     with col2: type_lame = st.selectbox("Type de lame", ["Injectée", "Extrudée"])
-    with col3: jeu_coulisses = st.number_input("Jeu coulisses (mm)", value=0.0, step=1.0, help="Valeur à soustraire de la largeur L (ex: déduction pour les coulisses)")
+    with col3: jeu_coulisses = st.number_input("Jeu coulisses (mm)", value=0.0, step=1.0)
     with col4: longueur_barre_vr = st.number_input("Lg barre lame (mm)", value=5500, step=100)
     with col5: epaisseur_scie_vr = st.number_input("Trait scie (mm)", value=5, step=1)
 
@@ -832,7 +825,7 @@ elif menu_selection == "🏠 Volets Roulants":
     df_volets = df_volets.dropna(subset=["Volet Roulant"])
 
     if df_volets.empty:
-        st.info("ℹ️ Aucun volet roulant n'a été détecté dans la saisie des ouvrages de ce projet.")
+        st.info("ℹ️ Aucun volet roulant n'a été détecté dans ce projet.")
     else:
         st.markdown('<div class="excel-head-blue">📝 Détail des Tabliers à Fabriquer</div>', unsafe_allow_html=True)
         
@@ -847,8 +840,6 @@ elif menu_selection == "🏠 Volets Roulants":
         # ----------------------------------------------
 
         for idx, row in df_volets.iterrows():
-
-        for idx, row in df_volets.iterrows():
             repere = str(row.get("Repère", f"V{idx}"))
             type_vr = str(row.get("Volet Roulant", "")).lower()
             L = float(row.get("Largeur (L)", 0))
@@ -856,36 +847,27 @@ elif menu_selection == "🏠 Volets Roulants":
             qte_chassis = int(row.get("Qté", 1))
             h_caisson = float(row.get("H Caisson", 0))
 
-            # Calcul de la largeur de la lame (L - jeu)
             largeur_lame = max(0.0, L - jeu_coulisses)
-
-            # Calcul de la hauteur du tablier
-            if "tunnel" in type_vr:
-                h_tablier = H + h_caisson
-            else: # monobloc ou autre
-                h_tablier = H
+            if "tunnel" in type_vr: h_tablier = H + h_caisson
+            else: h_tablier = H
             
             import math
             nb_lames_par_tablier = math.ceil(h_tablier / hauteur_lame)
             nb_lames_total = nb_lames_par_tablier * qte_chassis
 
-            # Option Kit moteur
             kit_moteur = st.checkbox(f"Kit Moteur pour {repere} ({qte_chassis}x)", value=True, key=f"moteur_{repere}")
 
             details_tabliers.append({
-                "Repère": repere,
-                "Type": type_vr.capitalize(),
-                "Largeur Lame (mm)": largeur_lame,
-                "Hauteur Tablier (mm)": h_tablier,
-                "Lames / volet": nb_lames_par_tablier,
-                "Qté Volets": qte_chassis,
-                "Total Lames": nb_lames_total,
+                "Repère": repere, "Type": type_vr.capitalize(), "Largeur Lame (mm)": largeur_lame,
+                "Hauteur Tablier (mm)": h_tablier, "Lames / volet": nb_lames_par_tablier,
+                "Qté Volets": qte_chassis, "Total Lames": nb_lames_total,
                 "Kit Moteur": "Oui" if kit_moteur else "Non"
             })
 
             for _ in range(nb_lames_total):
                 lames_a_couper.append({"ref": repere, "length": largeur_lame})
-# --- NOUVEAU : Calcul total Volets ---
+
+        # --- NOUVEAU : Calcul total Volets ---
         for t in details_tabliers:
             cost_lames = (t["Total Lames"] * t["Largeur Lame (mm)"] / 1000.0) * pu_lame
             cost_moteur = t["Qté Volets"] * pu_moteur if t["Kit Moteur"] == "Oui" else 0
@@ -894,14 +876,12 @@ elif menu_selection == "🏠 Volets Roulants":
         # -------------------------------------
 
         st.table(pd.DataFrame(details_tabliers))
-
         st.markdown("---")
         st.markdown('<div class="excel-head-yellow">✂️ Optimisation de Coupe des Lames (5.5m)</div>', unsafe_allow_html=True)
         
         if st.button("🚀 Calculer le débit des barres", type="primary"):
             if lames_a_couper:
                 barres_optimisees = optimize_cutting_1d_with_ref(lames_a_couper, longueur_barre_vr, epaisseur_scie_vr)
-                
                 grouped_bars_vr = []
                 for bar in barres_optimisees:
                     matched = False
@@ -915,16 +895,12 @@ elif menu_selection == "🏠 Volets Roulants":
                     if not matched: grouped_bars_vr.append({'pieces': bar, 'qty': 1})
 
                 html_vr = f'<table class="print-table" style="width: 100%;"><thead><tr><th style="width: 15%;">LAMES ({type_lame})</th><th style="width: 55%; text-align: center;">PLAN DE COUPE</th><th style="width: 10%; text-align: center;">QTÉ BARRES</th><th style="width: 10%; text-align: center;">CHUTE (mm)</th><th style="width: 10%; text-align: center;">PERTE %</th></tr></thead><tbody>'
-                
                 refs_uniques_vr = list(set([c["ref"] for c in lames_a_couper]))
                 map_couleurs_vr = {ref: PALETTE_COULEURS[i % len(PALETTE_COULEURS)] for i, ref in enumerate(refs_uniques_vr)}
                 
                 total_barres_vr = 0
                 for gb in grouped_bars_vr:
-                    bar = gb['pieces']
-                    qty = gb['qty']
-                    total_barres_vr += qty
-                    
+                    bar = gb['pieces']; qty = gb['qty']; total_barres_vr += qty
                     used_in_bar = sum(c['length'] for c in bar)
                     bar_blade_loss = (len(bar) - 1) * epaisseur_scie_vr if len(bar) > 1 else 0
                     chute_bar = longueur_barre_vr - used_in_bar - bar_blade_loss
@@ -937,25 +913,14 @@ elif menu_selection == "🏠 Volets Roulants":
                         html_barre_div += f'<div class="bar-segment" style="width: {pct_largeur}%; background-color: {couleur};" title="{cut["ref"]} - {cut["length"]} mm">{int(cut["length"])}</div>'
                     if chute_pct > 0: html_barre_div += f'<div class="bar-chute" style="width: {chute_pct}%;"></div>'
                     html_barre_div += '</div>'
-
                     html_vr += f'<tr><td style="font-weight: bold;">Barre 5.5m</td><td style="padding: 10px;">{html_barre_div}</td><td class="center-text" style="font-weight: bold; font-size: 15px;">{qty}</td><td class="center-text">{int(chute_bar)}</td><td class="center-text">{chute_pct:.1f}%</td></tr>'
                 
                 html_vr += f'<tr style="background-color: #DBEAFE; font-weight: bold;"><td colspan="2" style="text-align: right;">TOTAL BARRES À COMMANDER :</td><td class="center-text">{total_barres_vr}</td><td colspan="2"></td></tr>'
                 html_vr += "</tbody></table>"
-                
                 st.markdown(html_vr, unsafe_allow_html=True)
 
-elif menu_selection == "🛠️ Gestionnaire de Bibliothèque":
-    st.markdown('<div class="section-header no-print">🛠️ Catalogue Actuel Emporté</div>', unsafe_allow_html=True)
-    st.dataframe(pd.DataFrame(BIBLIOTHEQUE), use_container_width=True)
-
-# ==========================================
-# 🚧 NOUVEAU MODULE : GARDE-CORPS (IMPRESSION PARFAITE)
-# ==========================================
 elif menu_selection == "🚧 Garde-corps (Barres 6m)":
     st.markdown('<div class="section-header no-print">🧮 Module Garde-Corps — Optimisation Linéaire</div>', unsafe_allow_html=True)
-    st.write("Calculez le nombre de barres de profilé nécessaires (1 seul type de profilé) pour vos garde-corps selon leurs emplacements.")
-
     st.subheader("1. Configuration de la barre brute")
     col1, col2 = st.columns(2)
     with col1: bar_length = st.number_input("Longueur brute d'une barre (mm)", value=6000, step=100)
@@ -963,8 +928,6 @@ elif menu_selection == "🚧 Garde-corps (Barres 6m)":
 
     st.write("---")
     st.subheader("2. Saisie des tronçons nécessaires")
-    st.write("Indiquez l'emplacement de la découpe, la longueur nécessaire et la quantité de morceaux identiques à produire :")
-    
     edited_df_gc = st.data_editor(
         st.session_state.df_garde_corps,
         num_rows="dynamic",
@@ -975,179 +938,123 @@ elif menu_selection == "🚧 Garde-corps (Barres 6m)":
             "Quantité": st.column_config.NumberColumn("Quantité", min_value=1, step=1, required=True)
         }
     )
-
     st.write("---")
 
     if st.button("🚀 Générer le plan de coupe", type="primary", use_container_width=True):
-        try:
-            st.session_state.df_garde_corps = edited_df_gc.copy()
-            
-            cuts_list = []
-            for idx, row in edited_df_gc.iterrows():
-                if pd.isna(row.get("Longueur (mm)")) or pd.isna(row.get("Quantité")): continue 
-                ref = str(row.get("Emplacement / Réf", f"Pièce {idx+1}")).strip()
-                if not ref or ref.lower() == "none" or ref == "nan": ref = f"Pièce {idx+1}"
-                longueur = int(row.get("Longueur (mm)", 0))
-                qte = int(row.get("Quantité", 0))
-                if longueur > 0 and qte > 0:
-                    for _ in range(qte): cuts_list.append({"ref": ref, "length": longueur})
-            
-            if not cuts_list:
-                st.error("⚠️ Veuillez saisir au moins une ligne complète (Longueur et Quantité) dans le tableau.")
+        st.session_state.df_garde_corps = edited_df_gc.copy()
+        cuts_list = []
+        for idx, row in edited_df_gc.iterrows():
+            if pd.isna(row.get("Longueur (mm)")) or pd.isna(row.get("Quantité")): continue 
+            ref = str(row.get("Emplacement / Réf", f"Pièce {idx+1}")).strip()
+            if not ref or ref.lower() == "none" or ref == "nan": ref = f"Pièce {idx+1}"
+            longueur = int(row.get("Longueur (mm)", 0))
+            qte = int(row.get("Quantité", 0))
+            if longueur > 0 and qte > 0:
+                for _ in range(qte): cuts_list.append({"ref": ref, "length": longueur})
+        
+        if not cuts_list: st.error("⚠️ Veuillez saisir au moins une ligne complète (Longueur et Quantité).")
+        else:
+            max_cut_length = max([c['length'] for c in cuts_list])
+            if max_cut_length > bar_length:
+                st.error(f"❌ Erreur : Impossible de couper un morceau de {max_cut_length} mm dans une barre de {bar_length} mm.")
             else:
-                max_cut_length = max([c['length'] for c in cuts_list])
-                if max_cut_length > bar_length:
-                    st.error(f"❌ Erreur : Impossible de couper un morceau de {max_cut_length} mm dans une barre de {bar_length} mm.")
-                else:
-                    result_bars = optimize_cutting_1d_with_ref(cuts_list, bar_length, blade_width)
-                    grouped_bars = []
-                    for bar in result_bars:
-                        matched = False
-                        for gb in grouped_bars:
-                            if len(bar) == len(gb['pieces']):
-                                is_identical = True
-                                for p1, p2 in zip(bar, gb['pieces']):
-                                    if p1['length'] != p2['length'] or p1['ref'] != p2['ref']:
-                                        is_identical = False; break
-                                if is_identical: gb['qty'] += 1; matched = True; break
-                        if not matched: grouped_bars.append({'pieces': bar, 'qty': 1})
-
-                    refs_uniques = list(set([c["ref"] for c in cuts_list]))
-                    map_couleurs_gc = {ref: PALETTE_COULEURS[i % len(PALETTE_COULEURS)] for i, ref in enumerate(refs_uniques)}
-
-                    total_bars = len(result_bars)
-                    total_utile = sum([c['length'] for c in cuts_list])
-                    total_brut = total_bars * bar_length
-                    total_blade_loss = sum((len(b) - 1) * blade_width for b in result_bars if len(b) > 0)
-                    total_chute = total_brut - total_utile - total_blade_loss
-                    perte_pct = (total_chute / total_brut) * 100
-                    
-                    st.markdown(f'<div class="projet-title print-only">PROJET : {NOM_PROJET}</div>', unsafe_allow_html=True)
-                    
-                    # ---------------------------------------------------------------------
-                    # CRÉATION DU TABLEAU DE SAISIE QUI SERA VISIBLE UNIQUEMENT A L'IMPRESSION
-                    # ---------------------------------------------------------------------
-                    html_input_print = f"""
-                    <div class="print-only">
-                        <div class="excel-head-blue">📝 Récapitulatif des saisies (Garde-Corps)</div>
-                        <table class="print-table" style="width: 100%;">
-                            <thead>
-                                <tr>
-                                    <th style="width: 50%;">Emplacement dans le projet</th>
-                                    <th class="center-text" style="width: 25%;">Longueur (mm)</th>
-                                    <th class="center-text" style="width: 25%;">Quantité</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                    """
-                    for idx, row in edited_df_gc.iterrows():
-                        if pd.isna(row.get("Longueur (mm)")) or pd.isna(row.get("Quantité")): continue
-                        ref = str(row.get("Emplacement / Réf", f"Pièce {idx+1}")).strip()
-                        if not ref or ref.lower() == "none" or ref == "nan": ref = f"Pièce {idx+1}"
-                        longueur = int(row.get("Longueur (mm)", 0))
-                        qte = int(row.get("Quantité", 0))
-                        if longueur > 0 and qte > 0:
-                            html_input_print += f'<tr><td>{ref}</td><td class="center-text">{longueur}</td><td class="center-text">{qte}</td></tr>'
-                    html_input_print += "</tbody></table><br></div>"
-                    
-                    st.markdown(html_input_print, unsafe_allow_html=True)
-
-                    st.subheader("📊 Résumé du débit")
-                    m1, m2, m3 = st.columns(3)
-                    m1.metric("Barres totales à commander", f"{total_bars} Unités")
-                    m2.metric("Longueur utile totale", f"{total_utile / 1000:.2f} ml")
-                    m3.metric("Taux de perte global", f"{perte_pct:.1f} %")
-
-                    st.write("---")
-                    st.markdown('<div class="excel-head-yellow print-only">📋 Plan de calepinage (Coupes groupées)</div>', unsafe_allow_html=True)
-                    st.subheader("📋 Plan de calepinage (Coupes groupées)")
-
-                    html_garde_corps = '<table class="print-table" style="width: 100%;"><thead><tr><th style="width: 10%; text-align: center;">TYPE BARRE</th><th style="width: 50%; text-align: center;">PLAN DE COUPE VISUEL</th><th style="width: 8%; text-align: center;">QTÉ</th><th style="width: 10%; text-align: center;">UTILE (mm)</th><th style="width: 10%; text-align: center;">CHUTE (mm)</th><th style="width: 12%; text-align: center;">% PERTE</th></tr></thead><tbody>'
-
-                    b_idx = 1
+                result_bars = optimize_cutting_1d_with_ref(cuts_list, bar_length, blade_width)
+                grouped_bars = []
+                for bar in result_bars:
+                    matched = False
                     for gb in grouped_bars:
-                        bar = gb['pieces']; qty = gb['qty']
-                        used_in_bar = sum(c['length'] for c in bar)
-                        bar_blade_loss = (len(bar) - 1) * blade_width if len(bar) > 1 else 0
-                        chute_bar = bar_length - used_in_bar - bar_blade_loss
-                        chute_pct = (chute_bar / bar_length) * 100
+                        if len(bar) == len(gb['pieces']):
+                            is_identical = True
+                            for p1, p2 in zip(bar, gb['pieces']):
+                                if p1['length'] != p2['length'] or p1['ref'] != p2['ref']:
+                                    is_identical = False; break
+                            if is_identical: gb['qty'] += 1; matched = True; break
+                    if not matched: grouped_bars.append({'pieces': bar, 'qty': 1})
 
-                        html_barre_div = '<div class="bar-container">'
-                        for cut in bar:
-                            pct_largeur = ((cut['length'] + blade_width) / bar_length) * 100
-                            couleur = map_couleurs_gc.get(cut['ref'], "#1E40AF")
-                            html_barre_div += f'<div class="bar-segment" style="width: {pct_largeur}%; background-color: {couleur};" title="{cut["ref"]} - {cut["length"]} mm">{cut["length"]}</div>'
-                        if chute_pct > 0: html_barre_div += f'<div class="bar-chute" style="width: {chute_pct}%;"></div>'
-                        html_barre_div += '</div>'
+                refs_uniques = list(set([c["ref"] for c in cuts_list]))
+                map_couleurs_gc = {ref: PALETTE_COULEURS[i % len(PALETTE_COULEURS)] for i, ref in enumerate(refs_uniques)}
 
-                        html_garde_corps += f'<tr><td class="center-text" style="font-weight: bold;">Type {b_idx}</td><td style="padding: 10px;">{html_barre_div}</td><td class="center-text" style="font-weight: bold; font-size: 15px;">{qty}</td><td class="center-text">{int(used_in_bar)}</td><td class="center-text">{int(chute_bar)}</td><td class="center-text">{chute_pct:.1f}%</td></tr>'
-                        b_idx += 1
+                total_bars = len(result_bars)
+                total_utile = sum([c['length'] for c in cuts_list])
+                total_brut = total_bars * bar_length
+                total_blade_loss = sum((len(b) - 1) * blade_width for b in result_bars if len(b) > 0)
+                total_chute = total_brut - total_utile - total_blade_loss
+                perte_pct = (total_chute / total_brut) * 100
+                
+                # --- CALCUL DU DEVIS GARDE-CORPS ---
+                pu_gc = st.session_state.prix_entreprise.get("PROFIL_GC", 0.0)
+                st.session_state.total_gardecorps = total_bars * pu_gc
+                # -----------------------------------
 
-                    html_garde_corps += "</tbody></table>"
-                    
-                    legende_html = "<div style='margin-bottom: 20px; font-size: 13px;'><b>Légende des emplacements : </b>"
-                    for ref, color in map_couleurs_gc.items():
-                        legende_html += f"<span style='display:inline-block; margin-right: 15px;'><span style='display:inline-block; width:12px; height:12px; background-color:{color}; margin-right:5px; border-radius:2px;'></span>{ref}</span>"
-                    legende_html += "</div>"
-                    
-                    st.markdown(legende_html, unsafe_allow_html=True)
-                    st.markdown(html_garde_corps, unsafe_allow_html=True)
-                    
-                    # --- IMPRESSION AVEC NOM CUSTOM ---
-                    titre_pdf = f"{NOM_PROJET}_Garde_Corps_{DATE_DU_JOUR}".replace(" ", "_").replace("'", "")
-                    components.html(f"""
-                        <button onclick="
-                            var oldTitle = window.parent.document.title; 
-                            window.parent.document.title = '{titre_pdf}'; 
-                            setTimeout(function(){{ window.parent.print(); }}, 100);
-                            setTimeout(function(){{ window.parent.document.title = oldTitle; }}, 2000);
-                        " style="background-color: #10B981; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 14px; width: 100%; margin-bottom: 20px;">
-                        🖨️ IMPRIMER CE PLAN DE COUPE
-                        </button>
-                    """, height=70)
+                st.subheader("📊 Résumé du débit")
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Barres totales à commander", f"{total_bars} Unités")
+                m2.metric("Longueur utile totale", f"{total_utile / 1000:.2f} ml")
+                m3.metric("Taux de perte global", f"{perte_pct:.1f} %")
+                st.write("---")
 
-        except Exception as e:
-            st.error(f"Une erreur est survenue lors du calcul : {e}")
-# ==========================================
-# 💰 MODULE : GESTION DES PRIX UNITAIRES
-# ==========================================
+                html_garde_corps = '<table class="print-table" style="width: 100%;"><thead><tr><th style="width: 10%; text-align: center;">TYPE BARRE</th><th style="width: 50%; text-align: center;">PLAN DE COUPE VISUEL</th><th style="width: 8%; text-align: center;">QTÉ</th><th style="width: 10%; text-align: center;">UTILE (mm)</th><th style="width: 10%; text-align: center;">CHUTE (mm)</th><th style="width: 12%; text-align: center;">% PERTE</th></tr></thead><tbody>'
+                b_idx = 1
+                for gb in grouped_bars:
+                    bar = gb['pieces']; qty = gb['qty']
+                    used_in_bar = sum(c['length'] for c in bar)
+                    bar_blade_loss = (len(bar) - 1) * blade_width if len(bar) > 1 else 0
+                    chute_bar = bar_length - used_in_bar - bar_blade_loss
+                    chute_pct = (chute_bar / bar_length) * 100
+                    html_barre_div = '<div class="bar-container">'
+                    for cut in bar:
+                        pct_largeur = ((cut['length'] + blade_width) / bar_length) * 100
+                        couleur = map_couleurs_gc.get(cut['ref'], "#1E40AF")
+                        html_barre_div += f'<div class="bar-segment" style="width: {pct_largeur}%; background-color: {couleur};" title="{cut["ref"]} - {cut["length"]} mm">{cut["length"]}</div>'
+                    if chute_pct > 0: html_barre_div += f'<div class="bar-chute" style="width: {chute_pct}%;"></div>'
+                    html_barre_div += '</div>'
+                    html_garde_corps += f'<tr><td class="center-text" style="font-weight: bold;">Type {b_idx}</td><td style="padding: 10px;">{html_barre_div}</td><td class="center-text" style="font-weight: bold; font-size: 15px;">{qty}</td><td class="center-text">{int(used_in_bar)}</td><td class="center-text">{int(chute_bar)}</td><td class="center-text">{chute_pct:.1f}%</td></tr>'
+                    b_idx += 1
+                html_garde_corps += "</tbody></table>"
+                
+                legende_html = "<div style='margin-bottom: 20px; font-size: 13px;'><b>Légende des emplacements : </b>"
+                for ref, color in map_couleurs_gc.items():
+                    legende_html += f"<span style='display:inline-block; margin-right: 15px;'><span style='display:inline-block; width:12px; height:12px; background-color:{color}; margin-right:5px; border-radius:2px;'></span>{ref}</span>"
+                legende_html += "</div>"
+                
+                st.markdown(legende_html, unsafe_allow_html=True)
+                st.markdown(html_garde_corps, unsafe_allow_html=True)
+
+elif menu_selection == "🛠️ Gestionnaire de Bibliothèque":
+    st.markdown('<div class="section-header no-print">🛠️ Catalogue Actuel Emporté</div>', unsafe_allow_html=True)
+    st.dataframe(pd.DataFrame(BIBLIOTHEQUE), use_container_width=True)
+
 elif menu_selection == "💰 Mes Prix Unitaires":
     st.markdown('<div class="section-header no-print">💰 Gestion de mes Prix Unitaires</div>', unsafe_allow_html=True)
     st.info("Modifiez ici les prix spécifiques à votre entreprise. Ces prix serviront pour vos devis et calculs de rentabilité.")
 
-    # On force le rechargement depuis Supabase pour être sûr d'avoir les données directes
     st.session_state.prix_entreprise = load_user_prices(st.session_state.entreprise_id)
 
     lignes_prix = []
-    refs_vues = set() # Pour éviter les doublons (ex: Dormant Largeur et Dormant Hauteur)
+    refs_vues = set()
 
     for item in BIBLIOTHEQUE:
         ref = str(item.get("Ref", "")).strip().upper()
-        
-        # On ignore les lignes sans référence matérielle
         if not ref or ref == "-": continue 
         
         if ref not in refs_vues:
             refs_vues.add(ref)
-            # On cherche le prix basé uniquement sur la référence
             prix_actuel = st.session_state.prix_entreprise.get(ref, 0.0)
-            
-            # On nettoie le nom pour l'affichage (on enlève "Largeur" ou "Hauteur")
             comp_affiche = str(item.get("Composant", "")).replace(" Largeur", "").replace(" Hauteur", "").strip()
-            
             lignes_prix.append({
-                "Gamme": item.get("Gamme", ""),
-                "Série": item.get("Série", ""),
-                "Type Article": item.get("Type", ""),
-                "Composant": comp_affiche,
-                "Réf": ref,
-                "Unité": item.get("Unité", "U"),
-                "Prix Unitaire": prix_actuel
+                "Gamme": item.get("Gamme", ""), "Série": item.get("Série", ""),
+                "Type Article": item.get("Type", ""), "Composant": comp_affiche,
+                "Réf": ref, "Unité": item.get("Unité", "U"), "Prix Unitaire": prix_actuel
             })
+
+    # Ajout manuel des références virtuelles utilisées pour les calculs spéciaux (volets, moteur, etc.)
+    lignes_prix.append({"Gamme": "Général", "Série": "-", "Type Article": "VR", "Composant": "Lame Volet (Mètre)", "Réf": "LAME", "Unité": "m", "Prix Unitaire": st.session_state.prix_entreprise.get("LAME", 0.0)})
+    lignes_prix.append({"Gamme": "Général", "Série": "-", "Type Article": "VR", "Composant": "Kit Moteur", "Réf": "MOTEUR", "Unité": "U", "Prix Unitaire": st.session_state.prix_entreprise.get("MOTEUR", 0.0)})
+    lignes_prix.append({"Gamme": "Général", "Série": "-", "Type Article": "VR", "Composant": "Forfait Acc. VR", "Réf": "ACC_VR", "Unité": "U", "Prix Unitaire": st.session_state.prix_entreprise.get("ACC_VR", 0.0)})
+    lignes_prix.append({"Gamme": "Général", "Série": "-", "Type Article": "Barre", "Composant": "Profilé Garde-Corps", "Réf": "PROFIL_GC", "Unité": "Barre", "Prix Unitaire": st.session_state.prix_entreprise.get("PROFIL_GC", 0.0)})
 
     df_prix = pd.DataFrame(lignes_prix)
 
-    # Affichage interactif
     st.markdown("### 📋 Grille tarifaire de mon entreprise")
     edited_df_prix = st.data_editor(
         df_prix,
@@ -1159,7 +1066,6 @@ elif menu_selection == "💰 Mes Prix Unitaires":
         height=600
     )
 
-    # Sauvegarde dans Supabase
     if st.button("💾 Enregistrer ma grille tarifaire", type="primary", use_container_width=True):
         with st.spinner("Sauvegarde en cours..."):
             lignes_a_sauvegarder = []
@@ -1170,38 +1076,28 @@ elif menu_selection == "💰 Mes Prix Unitaires":
                 if pu > 0:
                     lignes_a_sauvegarder.append({
                         "entreprise_id": entreprise_id,
-                        "gamme": row["Gamme"],
-                        "serie": row["Série"],
-                        "composant": row["Composant"],
-                        "ref_composant": row["Réf"],
-                        "type_article": row["Type Article"],
-                        "unite": row["Unité"],
+                        "gamme": row["Gamme"], "serie": row["Série"],
+                        "composant": row["Composant"], "ref_composant": row["Réf"],
+                        "type_article": row["Type Article"], "unite": row["Unité"],
                         "prix_unitaire": pu
                     })
 
             try:
-                # 1. On efface les anciens prix de l'entreprise
                 supabase.table("prix_unitaires").delete().eq("entreprise_id", entreprise_id).execute()
-
-                # 2. On insère les nouveaux
                 if lignes_a_sauvegarder:
                     supabase.table("prix_unitaires").insert(lignes_a_sauvegarder).execute()
-
-                # 3. On rafraîchit la mémoire
                 st.session_state.prix_entreprise = load_user_prices(entreprise_id)
-                
                 st.success("✅ Vos prix ont été sauvegardés avec succès !")
                 st.rerun()
-                
             except Exception as e:
                 st.error(f"🔴 Erreur lors de la sauvegarde : {e}")
+
 # ==========================================
 # 📊 NOUVEAU MODULE : DEVIS GLOBAL
 # ==========================================
 elif menu_selection == "📊 Devis Global du Projet":
     st.markdown('<div class="section-header">📊 Synthèse Financière du Projet</div>', unsafe_allow_html=True)
     
-    # Calcul du total global
     grand_total = (st.session_state.total_alu + st.session_state.total_vitrage + 
                    st.session_state.total_accessoires + st.session_state.total_volets + 
                    st.session_state.total_gardecorps)
