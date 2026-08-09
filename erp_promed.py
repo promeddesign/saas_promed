@@ -120,6 +120,27 @@ def logout():
         st.session_state[key] = None
     st.cache_data.clear() 
     st.rerun()
+def load_user_prices(entreprise_id):
+    """
+    Récupère les prix spécifiques de l'entreprise et les stocke dans un dictionnaire.
+    Clé : "Ref_Composant", Valeur : Prix
+    """
+    prix_dict = {}
+    if not entreprise_id:
+        return prix_dict
+        
+    try:
+        # Note : Je me base sur ta capture d'écran où la colonne s'appelle "ref_composant"
+        res = supabase.table("prix_unitaires").select("ref_composant, composant, prix_unitaire").eq("entreprise_id", entreprise_id).execute()
+        for item in res.data:
+            ref = str(item.get("ref_composant", "")).strip()
+            comp = str(item.get("composant", "")).strip()
+            cle = f"{ref}_{comp}"
+            prix_dict[cle] = float(item.get("prix_unitaire", 0.0))
+    except Exception as e:
+        print("Erreur chargement prix:", e)
+        
+    return prix_dict
 
 # ==========================================
 # 3. INITIALISATION DES VARIABLES DE SESSION
@@ -216,6 +237,10 @@ st.sidebar.button("🚪 Se déconnecter", on_click=logout, use_container_width=T
 st.sidebar.markdown("---")
 
 BIBLIOTHEQUE = load_app_library()
+
+# NOUVEAU : Chargement des prix de l'entreprise connectée
+if "prix_entreprise" not in st.session_state:
+    st.session_state.prix_entreprise = load_user_prices(st.session_state.entreprise_id)
 PALETTE_COULEURS = ["#1E40AF", "#10B981", "#D97706", "#DC2626", "#7C3AED", "#0891B2", "#EC4899"]
 
 choix_gammes_dynamiques = sorted(list(set([str(x.get("Gamme", "")).strip() for x in BIBLIOTHEQUE if str(x.get("Gamme", "")).strip() != ""])))
@@ -342,7 +367,16 @@ st.sidebar.header("⚙️ Navigation")
 # AJOUT DU NOUVEAU MODULE ICI
 menu_selection = st.sidebar.radio(
     "Modules :",
-    ["📝 Saisie des Ouvrages", "📐 Fiche Atelier & Débit", "🪟 Carnet de Vitrage", "🛒 Quincaillerie & Joints", "🏠 Volets Roulants", "🛠️ Gestionnaire de Bibliothèque", "🚧 Garde-corps (Barres 6m)"]
+    [
+        "📝 Saisie des Ouvrages", 
+        "📐 Fiche Atelier & Débit", 
+        "🪟 Carnet de Vitrage", 
+        "🛒 Quincaillerie & Joints", 
+        "🏠 Volets Roulants", 
+        "🛠️ Gestionnaire de Bibliothèque", 
+        "💰 Mes Prix Unitaires",   # <-- NOUVEAU MODULE AJOUTÉ ICI
+        "🚧 Garde-corps (Barres 6m)"
+    ]
 )
 # ==========================================
 # 7. ROUTAGE DES MODULES
@@ -1046,3 +1080,89 @@ elif menu_selection == "🚧 Garde-corps (Barres 6m)":
 
         except Exception as e:
             st.error(f"Une erreur est survenue lors du calcul : {e}")
+# ==========================================
+# 💰 MODULE : GESTION DES PRIX UNITAIRES
+# ==========================================
+elif menu_selection == "💰 Mes Prix Unitaires":
+    st.markdown('<div class="section-header no-print">💰 Gestion de mes Prix Unitaires</div>', unsafe_allow_html=True)
+    st.info("Modifiez ici les prix spécifiques à votre entreprise. Ces prix serviront pour vos devis et calculs de rentabilité.")
+
+    # 1. Construction du tableau à partir de la bibliothèque et des prix enregistrés
+    lignes_prix = []
+    articles_vus = set() # Pour éviter les doublons si une même référence apparaît dans plusieurs formules
+
+    for item in BIBLIOTHEQUE:
+        ref = str(item.get("Ref", "")).strip()
+        composant = str(item.get("Composant", "")).strip()
+        
+        # On ignore les lignes sans référence matérielle
+        if not ref or ref == "-": continue 
+        
+        cle = f"{ref}_{composant}"
+        
+        if cle not in articles_vus:
+            articles_vus.add(cle)
+            # On cherche le prix dans le dictionnaire de l'entreprise, sinon 0.0
+            prix_actuel = st.session_state.prix_entreprise.get(cle, 0.0)
+            
+            lignes_prix.append({
+                "Gamme": item.get("Gamme", ""),
+                "Série": item.get("Série", ""),
+                "Type Article": item.get("Type", ""),
+                "Composant": composant,
+                "Réf": ref,
+                "Unité": item.get("Unité", "U"),
+                "Prix Unitaire": prix_actuel
+            })
+
+    df_prix = pd.DataFrame(lignes_prix)
+
+    # 2. Affichage interactif
+    st.markdown("### 📋 Grille tarifaire de mon entreprise")
+    edited_df_prix = st.data_editor(
+        df_prix,
+        use_container_width=True,
+        disabled=["Gamme", "Série", "Type Article", "Composant", "Réf", "Unité"], # Tout est bloqué sauf le PU
+        column_config={
+            "Prix Unitaire": st.column_config.NumberColumn("Prix Unitaire", min_value=0.0, format="%.2f DA")
+        },
+        height=600
+    )
+
+    # 3. Sauvegarde dans Supabase
+    if st.button("💾 Enregistrer ma grille tarifaire", type="primary", use_container_width=True):
+        with st.spinner("Sauvegarde en cours..."):
+            lignes_a_sauvegarder = []
+            entreprise_id = st.session_state.entreprise_id
+
+            # On ne sauvegarde que les articles qui ont un prix > 0 pour ne pas surcharger la base
+            for idx, row in edited_df_prix.iterrows():
+                pu = float(row["Prix Unitaire"])
+                if pu > 0:
+                    lignes_a_sauvegarder.append({
+                        "entreprise_id": entreprise_id,
+                        "gamme": row["Gamme"],
+                        "serie": row["Série"],
+                        "composant": row["Composant"],
+                        "ref_composant": row["Réf"],
+                        "type_article": row["Type Article"],
+                        "unite": row["Unité"],
+                        "prix_unitaire": pu
+                    })
+
+            try:
+                # On efface les anciens prix de l'entreprise
+                supabase.table("prix_unitaires").delete().eq("entreprise_id", entreprise_id).execute()
+
+                # On insère les nouveaux
+                if lignes_a_sauvegarder:
+                    supabase.table("prix_unitaires").insert(lignes_a_sauvegarder).execute()
+
+                # On met à jour le dictionnaire en session localement pour éviter un rechargement
+                st.session_state.prix_entreprise = load_user_prices(entreprise_id)
+                
+                st.success("✅ Vos prix ont été sauvegardés avec succès !")
+                st.rerun()
+                
+            except Exception as e:
+                st.error(f"🔴 Erreur lors de la sauvegarde : {e}")
