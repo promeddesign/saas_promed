@@ -605,7 +605,31 @@ elif menu_selection == "📐 Fiche Atelier & Débit":
 
 elif menu_selection == "🪟 Carnet de Vitrage":
     st.markdown('<div class="section-header no-print">🪟 Carnet de Vitrage (Miroitier)</div>', unsafe_allow_html=True)
-    btn_calculer_vitrage = st.button("🔄 CALCULER LES VITRAGES", type="primary", use_container_width=True)
+    
+    # 1. Collecter tous les types de vitrage uniques utilisés dans le projet
+    types_vitrages_projet = set()
+    for index, row in st.session_state.chassis_rows_v27.iterrows():
+        v_saisi = str(row.get("Vitrage", "")).strip()
+        if v_saisi and v_saisi != "-":
+            types_vitrages_projet.add(v_saisi)
+        else:
+            types_vitrages_projet.add("Standard")
+
+    st.markdown("### 💰 1. Saisie des Prix Unitaires du Vitrage (par m²)")
+    prix_vitrages_saisis = {}
+    if types_vitrages_projet:
+        cols_v = st.columns(min(len(types_vitrages_projet), 4))
+        for idx, t_vitre in enumerate(sorted(list(types_vitrages_projet))):
+            col_cible = cols_v[idx % len(cols_v)]
+            with col_cible:
+                # On récupère un prix par défaut s'il existe déjà en session
+                def_p = st.session_state.get(f"pu_vitre_{t_vitre}", 0.0)
+                prix_vitrages_saisis[t_vitre] = st.number_input(f"Prix m² — {t_vitre} (DA)", min_value=0.0, value=def_p, step=100.0, key=f"pu_vitre_{t_vitre}")
+    else:
+        st.info("Aucun type de vitrage spécifique détecté dans les châssis.")
+
+    st.markdown("---")
+    btn_calculer_vitrage = st.button("🔄 CALCULER LES VITRAGES & PRIX", type="primary", use_container_width=True)
 
     if btn_calculer_vitrage:
         edited_project = st.session_state.chassis_rows_v27
@@ -619,6 +643,8 @@ elif menu_selection == "🪟 Carnet de Vitrage":
             H = float(row["Hauteur (H)"])
             qte_ouvrage = int(row["Qté"])
             type_vitrage_saisi = str(row.get("Vitrage", "")).strip()
+            if not type_vitrage_saisi: type_vitrage_saisi = "Standard"
+            
             a_volet = str(row.get("Volet Roulant", "non")).lower()
             h_caisson = float(row.get("H Caisson", 0.0)) if a_volet == "caisson mono-bloc" else 0.0
             
@@ -663,34 +689,33 @@ elif menu_selection == "🪟 Carnet de Vitrage":
                     surf_tot = surf_u * v_data["qte"]
                     list_vitrages.append({
                         "Repère": repere, "Ouvrage": type_ouvrage, "Désignation": base_des,
-                        "Type Vitrage": type_vitrage_saisi if type_vitrage_saisi else "Standard",
+                        "Type Vitrage": type_vitrage_saisi,
                         "Largeur (mm)": int(v_L), "Hauteur (mm)": int(v_H), "Qté": v_data["qte"],
                         "Surf. U. (m²)": round(surf_u, 2), "Surf. Totale (m²)": round(surf_tot, 2)
                     })
 
-        titre_pdf = f"{NOM_PROJET}_Vitrage_{DATE_DU_JOUR}".replace(" ", "_").replace("'", "")
-        components.html(f"""
-            <button onclick="
-                var oldTitle = window.parent.document.title; 
-                window.parent.document.title = '{titre_pdf}'; 
-                setTimeout(function(){{ window.parent.print(); }}, 100);
-                setTimeout(function(){{ window.parent.document.title = oldTitle; }}, 2000);
-            " style="background-color: #EF4444; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 14px; width: 100%;">
-            🖨️ IMPRIMER LA COMMANDE MIROITIER
-            </button>
-        """, height=60)
-
         st.markdown(f'<div class="projet-title">PROJET : {NOM_PROJET}</div>', unsafe_allow_html=True)
-        st.markdown('<div class="excel-head-blue">🪟 CARNET DE VITRAGE (COMMANDE MIROITIER)</div>', unsafe_allow_html=True)
+        st.markdown('<div class="excel-head-blue">🪟 CARNET DE VITRAGE (COMMANDE MIROITIER & PRIX)</div>', unsafe_allow_html=True)
         
         if list_vitrages:
-            # --- CALCUL DU DEVIS VITRAGE ---
             st.session_state.total_vitrage = 0.0
             for v in list_vitrages:
-                type_vitre = str(v["Type Vitrage"]).strip().upper()
-                pu_vitre = st.session_state.prix_entreprise.get(type_vitre, 0.0)
-                v["Prix Total (DA)"] = v["Surf. Totale (m²)"] * pu_vitre
+                t_vitre = v["Type Vitrage"]
+                pu_m2 = prix_vitrages_saisis.get(t_vitre, 0.0)
+                v["Prix Total (DA)"] = v["Surf. Totale (m²)"] * pu_m2
                 st.session_state.total_vitrage += v["Prix Total (DA)"]
+            
+            df_vitrage = pd.DataFrame(list_vitrages)
+            surface_projet_totale = df_vitrage["Surf. Totale (m²)"].sum()
+            
+            html_vitrage = '<table class="print-table" style="width: 100%;"><thead><tr><th>Repère</th><th>Ouvrage</th><th>Détail Vitre</th><th>Type Vitrage</th><th class="center-text">Largeur (mm)</th><th class="center-text">Hauteur (mm)</th><th class="center-text">Qté</th><th class="center-text">Surf. Totale (m²)</th><th class="center-text">Prix Total (DA)</th></tr></thead><tbody>'
+            for idx, v in df_vitrage.iterrows():
+                html_vitrage += f'<tr><td><b>{v["Repère"]}</b></td><td>{v["Ouvrage"]}</td><td>{v["Désignation"]}</td><td>{v["Type Vitrage"]}</td><td class="center-text" style="color: #1E40AF; font-weight:bold;">{v["Largeur (mm)"]}</td><td class="center-text" style="color: #DC2626; font-weight:bold;">{v["Hauteur (mm)"]}</td><td class="center-text" style="font-weight:bold; font-size:15px;">{v["Qté"]}</td><td class="center-text">{v["Surf. Totale (m²)"]:.2f}</td><td class="center-text" style="font-weight:bold; color:#047857;">{v["Prix Total (DA)"]:.2f} DA</td></tr>'
+            html_vitrage += f'<tr style="background-color: #DBEAFE; font-weight: bold;"><td colspan="7" style="text-align: right;">TOTAL GLOBAL VITRAGE :</td><td class="center-text">{surface_projet_totale:.2f} m²</td><td class="center-text" style="color:#1E3A8A; font-size:16px;">{st.session_state.total_vitrage:.2f} DA</td></tr>'
+            html_vitrage += '</tbody></table>'
+            st.markdown(html_vitrage.replace('\n', ''), unsafe_allow_html=True)
+        else:
+            st.info("Aucun vitrage n'a été détecté.")
             # -------------------------------
             
             df_vitrage = pd.DataFrame(list_vitrages)
@@ -810,9 +835,9 @@ elif menu_selection == "🛒 Quincaillerie & Joints":
             st.markdown(html_joints.replace('\n', ''), unsafe_allow_html=True)
 
 elif menu_selection == "🏠 Volets Roulants":
-    st.markdown('<div class="section-header no-print">🏠 Module Volets Roulants</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-header no-print">🏠 Module Volets Roulants & Tarification</div>', unsafe_allow_html=True)
     
-    st.markdown("### ⚙️ Paramètres du Tablier")
+    st.markdown("### ⚙️ 1. Paramètres du Tablier")
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1: hauteur_lame = st.number_input("Hauteur lame (mm)", value=43.0, step=1.0)
     with col2: type_lame = st.selectbox("Type de lame", ["Injectée", "Extrudée"])
@@ -820,6 +845,18 @@ elif menu_selection == "🏠 Volets Roulants":
     with col4: longueur_barre_vr = st.number_input("Lg barre lame (mm)", value=5500, step=100)
     with col5: epaisseur_scie_vr = st.number_input("Trait scie (mm)", value=5, step=1)
 
+    st.markdown("### 💰 2. Saisie des Prix Unitaires (Volets)")
+    c_p1, c_p2, c_p3, c_p4 = st.columns(4)
+    with c_p1:
+        pu_barre_lame = st.number_input("Prix barre Lame 5.5m (DA)", min_value=0.0, value=st.session_state.get("vr_pu_lame", 0.0), step=100.0, key="vr_pu_lame")
+    with c_p2:
+        pu_acc_mono = st.number_input("Prix Acc. Monobloc (Forfait)", min_value=0.0, value=st.session_state.get("vr_pu_mono", 0.0), step=100.0, key="vr_pu_mono")
+    with c_p3:
+        pu_acc_tun = st.number_input("Prix Acc. Tunnel (Forfait)", min_value=0.0, value=st.session_state.get("vr_pu_tun", 0.0), step=100.0, key="vr_pu_tun")
+    with c_p4:
+        pu_moteur = st.number_input("Prix Kit Moteur (Unité)", min_value=0.0, value=st.session_state.get("vr_pu_mot", 0.0), step=100.0, key="vr_pu_mot")
+
+    st.markdown("---")
     df_projet = st.session_state.chassis_rows_v27
     df_volets = df_projet[df_projet["Volet Roulant"].str.lower() != "non"]
     df_volets = df_volets.dropna(subset=["Volet Roulant"])
@@ -827,17 +864,12 @@ elif menu_selection == "🏠 Volets Roulants":
     if df_volets.empty:
         st.info("ℹ️ Aucun volet roulant n'a été détecté dans ce projet.")
     else:
-        st.markdown('<div class="excel-head-blue">📝 Détail des Tabliers à Fabriquer</div>', unsafe_allow_html=True)
+        st.markdown('<div class="excel-head-blue">📝 Détail des Tabliers & Sous-Détail Financier</div>', unsafe_allow_html=True)
         
         lames_a_couper = []
         details_tabliers = []
-
-        # --- NOUVEAU : Récupération des prix Volets ---
+        sous_detail_vr = []
         st.session_state.total_volets = 0.0
-        pu_lame = st.session_state.prix_entreprise.get("LAME", 0.0)
-        pu_moteur = st.session_state.prix_entreprise.get("MOTEUR", 0.0)
-        pu_acc_vr = st.session_state.prix_entreprise.get("ACC_VR", 0.0)
-        # ----------------------------------------------
 
         for idx, row in df_volets.iterrows():
             repere = str(row.get("Repère", f"V{idx}"))
@@ -857,15 +889,39 @@ elif menu_selection == "🏠 Volets Roulants":
 
             kit_moteur = st.checkbox(f"Kit Moteur pour {repere} ({qte_chassis}x)", value=True, key=f"moteur_{repere}")
 
+            # Calcul financier individuel pour ce volet
+            longueur_totale_lames_mm = nb_lames_total * largeur_lame
+            nb_barres_lames = longueur_totale_lames_mm / longueur_barre_vr
+            cout_lames = nb_barres_lames * pu_barre_lame
+            
+            cout_moteur_ligne = qte_chassis * pu_moteur if kit_moteur else 0.0
+            pu_accessoire_choisi = pu_acc_tun if "tunnel" in type_vr else pu_acc_mono
+            cout_acc_ligne = qte_chassis * pu_accessoire_choisi
+            
+            total_ligne_vr = cout_lames + cout_moteur_ligne + cout_acc_ligne
+            st.session_state.total_volets += total_ligne_vr
+
             details_tabliers.append({
                 "Repère": repere, "Type": type_vr.capitalize(), "Largeur Lame (mm)": largeur_lame,
-                "Hauteur Tablier (mm)": h_tablier, "Lames / volet": nb_lames_par_tablier,
-                "Qté Volets": qte_chassis, "Total Lames": nb_lames_total,
+                "Hauteur Tablier (mm)": h_tablier, "Qté Volets": qte_chassis, "Total Lames": nb_lames_total,
                 "Kit Moteur": "Oui" if kit_moteur else "Non"
+            })
+            
+            sous_detail_vr.append({
+                "Repère": repere,
+                "Coût Lames (DA)": round(cout_lames, 2),
+                "Coût Moteur (DA)": round(cout_moteur_ligne, 2),
+                "Coût Accessoires (DA)": round(cout_acc_ligne, 2),
+                "TOTAL (DA)": round(total_ligne_vr, 2)
             })
 
             for _ in range(nb_lames_total):
                 lames_a_couper.append({"ref": repere, "length": largeur_lame})
+
+        st.table(pd.DataFrame(details_tabliers))
+        st.markdown("#### 💡 Sous-détail des coûts par volet :")
+        st.table(pd.DataFrame(sous_detail_vr))
+        st.success(f"**Montant Total Volets Roulants : {st.session_state.total_volets:,.2f} DA**")
 
         # --- NOUVEAU : Calcul total Volets ---
         for t in details_tabliers:
@@ -920,27 +976,43 @@ elif menu_selection == "🏠 Volets Roulants":
                 st.markdown(html_vr, unsafe_allow_html=True)
 
 elif menu_selection == "🚧 Garde-corps (Barres 6m)":
-    st.markdown('<div class="section-header no-print">🧮 Module Garde-Corps — Optimisation Linéaire</div>', unsafe_allow_html=True)
-    st.subheader("1. Configuration de la barre brute")
+    st.markdown('<div class="section-header no-print">🧮 Module Garde-Corps — Optimisation & Tarification</div>', unsafe_allow_html=True)
+    
+    st.subheader("1. Configuration de la barre brute de profilé")
     col1, col2 = st.columns(2)
     with col1: bar_length = st.number_input("Longueur brute d'une barre (mm)", value=6000, step=100)
     with col2: blade_width = st.number_input("Épaisseur de la lame / Trait de coupe (mm)", value=5, step=1)
 
     st.write("---")
-    st.subheader("2. Saisie des tronçons nécessaires")
+    st.subheader("2. Saisie des tronçons et verres associés")
+    
+    if "L Vitrage (mm)" not in st.session_state.df_garde_corps.columns:
+        st.session_state.df_garde_corps["L Vitrage (mm)"] = 0.0
+        st.session_state.df_garde_corps["H Vitrage (mm)"] = 0.0
+
     edited_df_gc = st.data_editor(
         st.session_state.df_garde_corps,
         num_rows="dynamic",
         use_container_width=True,
         column_config={
-            "Emplacement / Réf": st.column_config.TextColumn("Emplacement dans le projet", required=True),
-            "Longueur (mm)": st.column_config.NumberColumn("Longueur (mm)", min_value=1, step=1, required=True),
-            "Quantité": st.column_config.NumberColumn("Quantité", min_value=1, step=1, required=True)
+            "Emplacement / Réf": st.column_config.TextColumn("Emplacement", required=True),
+            "Longueur (mm)": st.column_config.NumberColumn("Lg Barre Alu (mm)", min_value=1, step=1, required=True),
+            "Quantité": st.column_config.NumberColumn("Quantité", min_value=1, step=1, required=True),
+            "L Vitrage (mm)": st.column_config.NumberColumn("Lg Verre (mm)"),
+            "H Vitrage (mm)": st.column_config.NumberColumn("Ht Verre (mm)")
         }
     )
+
+    st.markdown("### 💰 3. Prix Unitaires du Garde-Corps")
+    gc_c1, gc_c2 = st.columns(2)
+    with gc_c1:
+        pu_barre_gc = st.number_input("Prix de la Barre Profilé 6m (DA)", min_value=0.0, value=st.session_state.get("gc_pu_barre", 0.0), step=100.0, key="gc_pu_barre")
+    with gc_c2:
+        pu_verre_gc = st.number_input("Prix du Verre de Garde-corps (DA / m²)", min_value=0.0, value=st.session_state.get("gc_pu_verre", 0.0), step=100.0, key="gc_pu_verre")
+
     st.write("---")
 
-    if st.button("🚀 Générer le plan de coupe", type="primary", use_container_width=True):
+    if st.button("🚀 Générer le plan de coupe & calculer le devis", type="primary", use_container_width=True):
         st.session_state.df_garde_corps = edited_df_gc.copy()
         cuts_list = []
         for idx, row in edited_df_gc.iterrows():
@@ -952,7 +1024,8 @@ elif menu_selection == "🚧 Garde-corps (Barres 6m)":
             if longueur > 0 and qte > 0:
                 for _ in range(qte): cuts_list.append({"ref": ref, "length": longueur})
         
-        if not cuts_list: st.error("⚠️ Veuillez saisir au moins une ligne complète (Longueur et Quantité).")
+        if not cuts_list:
+            st.error("⚠️ Veuillez saisir au moins une ligne complète (Longueur et Quantité).")
         else:
             max_cut_length = max([c['length'] for c in cuts_list])
             if max_cut_length > bar_length:
@@ -971,9 +1044,6 @@ elif menu_selection == "🚧 Garde-corps (Barres 6m)":
                             if is_identical: gb['qty'] += 1; matched = True; break
                     if not matched: grouped_bars.append({'pieces': bar, 'qty': 1})
 
-                refs_uniques = list(set([c["ref"] for c in cuts_list]))
-                map_couleurs_gc = {ref: PALETTE_COULEURS[i % len(PALETTE_COULEURS)] for i, ref in enumerate(refs_uniques)}
-
                 total_bars = len(result_bars)
                 total_utile = sum([c['length'] for c in cuts_list])
                 total_brut = total_bars * bar_length
@@ -981,10 +1051,31 @@ elif menu_selection == "🚧 Garde-corps (Barres 6m)":
                 total_chute = total_brut - total_utile - total_blade_loss
                 perte_pct = (total_chute / total_brut) * 100
                 
-                # --- CALCUL DU DEVIS GARDE-CORPS ---
-                pu_gc = st.session_state.prix_entreprise.get("PROFIL_GC", 0.0)
-                st.session_state.total_gardecorps = total_bars * pu_gc
-                # -----------------------------------
+                # Calcul financier Garde-Corps
+                cout_barres_gc = total_bars * pu_barre_gc
+                surface_verre_totale_m2 = 0.0
+                for idx, row in edited_df_gc.iterrows():
+                    l_v = float(row.get("L Vitrage (mm)", 0))
+                    h_v = float(row.get("H Vitrage (mm)", 0))
+                    qte_v = int(row.get("Quantité", 0))
+                    if l_v > 0 and h_v > 0:
+                        surface_verre_totale_m2 += ((l_v * h_v) / 1000000.0) * qte_v
+                
+                cout_verre_gc = surface_verre_totale_m2 * pu_verre_gc
+                st.session_state.total_gardecorps = cout_barres_gc + cout_verre_gc
+
+                st.subheader("📊 Résumé du débit")
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Barres totales à commander", f"{total_bars} Unités")
+                m2.metric("Longueur utile totale", f"{total_utile / 1000:.2f} ml")
+                m3.metric("Taux de perte global", f"{perte_pct:.1f} %")
+
+                st.markdown("### 💰 Sous-Détail Financier Garde-Corps")
+                st.table(pd.DataFrame([
+                    {"Élément": f"Profilés Aluminium ({total_bars} Barres de 6m)", "Montant": f"{cout_barres_gc:,.2f} DA"},
+                    {"Élément": f"Vitrages Garde-Corps ({surface_verre_totale_m2:.2f} m²)", "Montant": f"{cout_verre_gc:,.2f} DA"},
+                    {"Élément": "TOTAL GARDE-CORPS", "Montant": f"{st.session_state.total_gardecorps:,.2f} DA"}
+                ]))
 
                 st.subheader("📊 Résumé du débit")
                 m1, m2, m3 = st.columns(3)
