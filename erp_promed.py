@@ -122,26 +122,24 @@ def logout():
     st.rerun()
 def load_user_prices(entreprise_id):
     """
-    Récupère les prix spécifiques de l'entreprise et les stocke dans un dictionnaire.
-    Clé : "Ref_Composant", Valeur : Prix
+    Récupère les prix spécifiques de l'entreprise.
+    Clé : "Ref", Valeur : Prix
     """
     prix_dict = {}
     if not entreprise_id:
         return prix_dict
         
     try:
-        # Note : Je me base sur ta capture d'écran où la colonne s'appelle "ref_composant"
-        res = supabase.table("prix_unitaires").select("ref_composant, composant, prix_unitaire").eq("entreprise_id", entreprise_id).execute()
+        res = supabase.table("prix_unitaires").select("ref_composant, prix_unitaire").eq("entreprise_id", entreprise_id).execute()
         for item in res.data:
-            ref = str(item.get("ref_composant", "")).strip()
-            comp = str(item.get("composant", "")).strip()
-            cle = f"{ref}_{comp}"
-            prix_dict[cle] = float(item.get("prix_unitaire", 0.0))
+            # On utilise uniquement la référence (en majuscule pour éviter les erreurs de casse)
+            ref = str(item.get("ref_composant", "")).strip().upper()
+            if ref:
+                prix_dict[ref] = float(item.get("prix_unitaire", 0.0))
     except Exception as e:
         print("Erreur chargement prix:", e)
         
     return prix_dict
-
 # ==========================================
 # 3. INITIALISATION DES VARIABLES DE SESSION
 # ==========================================
@@ -1087,29 +1085,31 @@ elif menu_selection == "💰 Mes Prix Unitaires":
     st.markdown('<div class="section-header no-print">💰 Gestion de mes Prix Unitaires</div>', unsafe_allow_html=True)
     st.info("Modifiez ici les prix spécifiques à votre entreprise. Ces prix serviront pour vos devis et calculs de rentabilité.")
 
-    # 1. Construction du tableau à partir de la bibliothèque et des prix enregistrés
+    # On force le rechargement depuis Supabase pour être sûr d'avoir les données directes
+    st.session_state.prix_entreprise = load_user_prices(st.session_state.entreprise_id)
+
     lignes_prix = []
-    articles_vus = set() # Pour éviter les doublons si une même référence apparaît dans plusieurs formules
+    refs_vues = set() # Pour éviter les doublons (ex: Dormant Largeur et Dormant Hauteur)
 
     for item in BIBLIOTHEQUE:
-        ref = str(item.get("Ref", "")).strip()
-        composant = str(item.get("Composant", "")).strip()
+        ref = str(item.get("Ref", "")).strip().upper()
         
         # On ignore les lignes sans référence matérielle
         if not ref or ref == "-": continue 
         
-        cle = f"{ref}_{composant}"
-        
-        if cle not in articles_vus:
-            articles_vus.add(cle)
-            # On cherche le prix dans le dictionnaire de l'entreprise, sinon 0.0
-            prix_actuel = st.session_state.prix_entreprise.get(cle, 0.0)
+        if ref not in refs_vues:
+            refs_vues.add(ref)
+            # On cherche le prix basé uniquement sur la référence
+            prix_actuel = st.session_state.prix_entreprise.get(ref, 0.0)
+            
+            # On nettoie le nom pour l'affichage (on enlève "Largeur" ou "Hauteur")
+            comp_affiche = str(item.get("Composant", "")).replace(" Largeur", "").replace(" Hauteur", "").strip()
             
             lignes_prix.append({
                 "Gamme": item.get("Gamme", ""),
                 "Série": item.get("Série", ""),
                 "Type Article": item.get("Type", ""),
-                "Composant": composant,
+                "Composant": comp_affiche,
                 "Réf": ref,
                 "Unité": item.get("Unité", "U"),
                 "Prix Unitaire": prix_actuel
@@ -1117,25 +1117,24 @@ elif menu_selection == "💰 Mes Prix Unitaires":
 
     df_prix = pd.DataFrame(lignes_prix)
 
-    # 2. Affichage interactif
+    # Affichage interactif
     st.markdown("### 📋 Grille tarifaire de mon entreprise")
     edited_df_prix = st.data_editor(
         df_prix,
         use_container_width=True,
-        disabled=["Gamme", "Série", "Type Article", "Composant", "Réf", "Unité"], # Tout est bloqué sauf le PU
+        disabled=["Gamme", "Série", "Type Article", "Composant", "Réf", "Unité"], 
         column_config={
             "Prix Unitaire": st.column_config.NumberColumn("Prix Unitaire", min_value=0.0, format="%.2f DA")
         },
         height=600
     )
 
-    # 3. Sauvegarde dans Supabase
+    # Sauvegarde dans Supabase
     if st.button("💾 Enregistrer ma grille tarifaire", type="primary", use_container_width=True):
         with st.spinner("Sauvegarde en cours..."):
             lignes_a_sauvegarder = []
             entreprise_id = st.session_state.entreprise_id
 
-            # On ne sauvegarde que les articles qui ont un prix > 0 pour ne pas surcharger la base
             for idx, row in edited_df_prix.iterrows():
                 pu = float(row["Prix Unitaire"])
                 if pu > 0:
@@ -1151,14 +1150,14 @@ elif menu_selection == "💰 Mes Prix Unitaires":
                     })
 
             try:
-                # On efface les anciens prix de l'entreprise
+                # 1. On efface les anciens prix de l'entreprise
                 supabase.table("prix_unitaires").delete().eq("entreprise_id", entreprise_id).execute()
 
-                # On insère les nouveaux
+                # 2. On insère les nouveaux
                 if lignes_a_sauvegarder:
                     supabase.table("prix_unitaires").insert(lignes_a_sauvegarder).execute()
 
-                # On met à jour le dictionnaire en session localement pour éviter un rechargement
+                # 3. On rafraîchit la mémoire
                 st.session_state.prix_entreprise = load_user_prices(entreprise_id)
                 
                 st.success("✅ Vos prix ont été sauvegardés avec succès !")
