@@ -632,7 +632,7 @@ st.markdown("---")
 btn_calculer_vitrage = st.button("🔄 CALCULER LES VITRAGES & PRIX", type="primary", use_container_width=True)
 
     # 1. On mémorise le clic
-        if btn_calculer_vitrage:
+    if btn_calculer_vitrage:
         st.session_state.afficher_resultats_vitrage = True
 
     # 2. On affiche si la variable est en mémoire (même si on change d'onglet)
