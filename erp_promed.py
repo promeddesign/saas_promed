@@ -628,11 +628,17 @@ elif menu_selection == "🪟 Carnet de Vitrage":
     else:
         st.info("Aucun type de vitrage spécifique détecté dans les châssis.")
 
-    st.markdown("---")
+st.markdown("---")
     btn_calculer_vitrage = st.button("🔄 CALCULER LES VITRAGES & PRIX", type="primary", use_container_width=True)
 
+    # 1. On mémorise le clic
     if btn_calculer_vitrage:
+        st.session_state.afficher_resultats_vitrage = True
+
+    # 2. On affiche si la variable est en mémoire (même si on change d'onglet)
+    if st.session_state.get("afficher_resultats_vitrage", False):
         edited_project = st.session_state.chassis_rows_v27
+        # ... (la suite de ton code reste exactement pareille à partir d'ici)
         list_vitrages = []
         for index, row in edited_project.iterrows():
             type_ouvrage = str(row.get("Ouvrage", "")).strip()
@@ -722,8 +728,14 @@ elif menu_selection == "🛒 Quincaillerie & Joints":
     st.markdown('<div class="section-header no-print">🛒 Quincaillerie & Joints (Accessoires)</div>', unsafe_allow_html=True)
     btn_calculer_acc = st.button("🔄 CALCULER LES BESOINS", type="primary", use_container_width=True)
 
+    # 1. On mémorise le clic
     if btn_calculer_acc:
+        st.session_state.afficher_resultats_acc = True
+
+    # 2. On affiche si la variable est en mémoire
+    if st.session_state.get("afficher_resultats_acc", False):
         edited_project = st.session_state.chassis_rows_v27
+        # ... (la suite de ton code reste exactement pareille à partir d'ici)
         list_recap_chassis = []; list_accessoires = []; list_joints = []
         for index, row in edited_project.iterrows():
             type_ouvrage = str(row.get("Ouvrage", "")).strip()
@@ -846,85 +858,95 @@ elif menu_selection == "🏠 Volets Roulants":
         pu_moteur = st.number_input("Prix Kit Moteur (Unité)", min_value=0.0, value=st.session_state.get("vr_pu_mot", 0.0), step=100.0, key="vr_pu_mot")
 
     st.markdown("---")
-    df_projet = st.session_state.chassis_rows_v27
-    df_volets = df_projet[df_projet["Volet Roulant"].str.lower() != "non"]
-    df_volets = df_volets.dropna(subset=["Volet Roulant"])
+    
+    # Bouton de calcul avec maintien de l'état (évite de tout perdre en changeant d'onglet)
+    btn_calculer_vr = st.button("🔄 CALCULER LES VOLETS", type="primary", use_container_width=True)
+    if btn_calculer_vr:
+        st.session_state.afficher_resultats_vr = True
 
-    if df_volets.empty:
-        st.info("ℹ️ Aucun volet roulant n'a été détecté dans ce projet.")
-    else:
-        st.markdown('<div class="excel-head-blue">📝 Détail des Tabliers & Sous-Détail Financier</div>', unsafe_allow_html=True)
-        
-        lames_a_couper = []
-        details_tabliers = []
-        sous_detail_vr = []
-        st.session_state.total_volets = 0.0
+    if st.session_state.get("afficher_resultats_vr", False):
+        df_projet = st.session_state.chassis_rows_v27
+        df_volets = df_projet[df_projet["Volet Roulant"].str.lower() != "non"]
+        df_volets = df_volets.dropna(subset=["Volet Roulant"])
 
-        for idx, row in df_volets.iterrows():
-            repere = str(row.get("Repère", f"V{idx}"))
-            type_vr = str(row.get("Volet Roulant", "")).lower()
-            L = float(row.get("Largeur (L)", 0))
-            H = float(row.get("Hauteur (H)", 0))
-            qte_chassis = int(row.get("Qté", 1))
-            h_caisson = float(row.get("H Caisson", 0))
+        if df_volets.empty:
+            st.info("ℹ️ Aucun volet roulant n'a été détecté dans ce projet.")
+        else:
+            # Bouton d'impression
+            titre_pdf = f"{NOM_PROJET}_Volets_{DATE_DU_JOUR}".replace(" ", "_").replace("'", "")
+            components.html(f"""
+                <button onclick="
+                    var oldTitle = window.parent.document.title; 
+                    window.parent.document.title = '{titre_pdf}'; 
+                    setTimeout(function(){{ window.parent.print(); }}, 100);
+                    setTimeout(function(){{ window.parent.document.title = oldTitle; }}, 2000);
+                " style="background-color: #EF4444; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 14px; width: 100%;">
+                🖨️ IMPRIMER LE DÉTAIL DES VOLETS
+                </button>
+            """, height=60)
 
-            largeur_lame = max(0.0, L - jeu_coulisses)
-            if "tunnel" in type_vr: h_tablier = H + h_caisson
-            else: h_tablier = H
+            st.markdown('<div class="excel-head-blue">📝 Détail des Tabliers & Sous-Détail Financier</div>', unsafe_allow_html=True)
             
-            import math
-            nb_lames_par_tablier = math.ceil(h_tablier / hauteur_lame)
-            nb_lames_total = nb_lames_par_tablier * qte_chassis
+            lames_a_couper = []
+            details_tabliers = []
+            sous_detail_vr = []
+            st.session_state.total_volets = 0.0
 
-            kit_moteur = st.checkbox(f"Kit Moteur pour {repere} ({qte_chassis}x)", value=True, key=f"moteur_{repere}")
+            for idx, row in df_volets.iterrows():
+                repere = str(row.get("Repère", f"V{idx}"))
+                type_vr = str(row.get("Volet Roulant", "")).lower()
+                L = float(row.get("Largeur (L)", 0))
+                H = float(row.get("Hauteur (H)", 0))
+                qte_chassis = int(row.get("Qté", 1))
+                h_caisson = float(row.get("H Caisson", 0))
 
-            # Calcul financier individuel pour ce volet
-            longueur_totale_lames_mm = nb_lames_total * largeur_lame
-            nb_barres_lames = longueur_totale_lames_mm / longueur_barre_vr
-            cout_lames = nb_barres_lames * pu_barre_lame
+                largeur_lame = max(0.0, L - jeu_coulisses)
+                if "tunnel" in type_vr: h_tablier = H + h_caisson
+                else: h_tablier = H
+                
+                import math
+                nb_lames_par_tablier = math.ceil(h_tablier / hauteur_lame)
+                nb_lames_total = nb_lames_par_tablier * qte_chassis
+
+                kit_moteur = True # Par défaut, on peut le rendre dynamique si besoin
+
+                # Calcul financier
+                longueur_totale_lames_mm = nb_lames_total * largeur_lame
+                nb_barres_lames = longueur_totale_lames_mm / longueur_barre_vr
+                cout_lames = nb_barres_lames * pu_barre_lame
+                
+                cout_moteur_ligne = qte_chassis * pu_moteur if kit_moteur else 0.0
+                pu_accessoire_choisi = pu_acc_tun if "tunnel" in type_vr else pu_acc_mono
+                cout_acc_ligne = qte_chassis * pu_accessoire_choisi
+                
+                total_ligne_vr = cout_lames + cout_moteur_ligne + cout_acc_ligne
+                st.session_state.total_volets += total_ligne_vr
+
+                details_tabliers.append({
+                    "Repère": repere, "Type": type_vr.capitalize(), "Largeur Lame (mm)": largeur_lame,
+                    "Hauteur Tablier (mm)": h_tablier, "Qté Volets": qte_chassis, "Total Lames": nb_lames_total,
+                    "Kit Moteur": "Oui" if kit_moteur else "Non"
+                })
+                
+                sous_detail_vr.append({
+                    "Repère": repere,
+                    "Coût Lames (DA)": round(cout_lames, 2),
+                    "Coût Moteur (DA)": round(cout_moteur_ligne, 2),
+                    "Coût Accessoires (DA)": round(cout_acc_ligne, 2),
+                    "TOTAL (DA)": round(total_ligne_vr, 2)
+                })
+
+                for _ in range(nb_lames_total):
+                    lames_a_couper.append({"ref": repere, "length": largeur_lame})
+
+            st.table(pd.DataFrame(details_tabliers))
+            st.markdown("#### 💡 Sous-détail des coûts par volet :")
+            st.table(pd.DataFrame(sous_detail_vr))
+            st.success(f"**Montant Total Volets Roulants : {st.session_state.total_volets:,.2f} DA**")
+
+            st.markdown("---")
+            st.markdown('<div class="excel-head-yellow">✂️ Optimisation de Coupe des Lames (5.5m)</div>', unsafe_allow_html=True)
             
-            cout_moteur_ligne = qte_chassis * pu_moteur if kit_moteur else 0.0
-            pu_accessoire_choisi = pu_acc_tun if "tunnel" in type_vr else pu_acc_mono
-            cout_acc_ligne = qte_chassis * pu_accessoire_choisi
-            
-            total_ligne_vr = cout_lames + cout_moteur_ligne + cout_acc_ligne
-            st.session_state.total_volets += total_ligne_vr
-
-            details_tabliers.append({
-                "Repère": repere, "Type": type_vr.capitalize(), "Largeur Lame (mm)": largeur_lame,
-                "Hauteur Tablier (mm)": h_tablier, "Qté Volets": qte_chassis, "Total Lames": nb_lames_total,
-                "Kit Moteur": "Oui" if kit_moteur else "Non"
-            })
-            
-            sous_detail_vr.append({
-                "Repère": repere,
-                "Coût Lames (DA)": round(cout_lames, 2),
-                "Coût Moteur (DA)": round(cout_moteur_ligne, 2),
-                "Coût Accessoires (DA)": round(cout_acc_ligne, 2),
-                "TOTAL (DA)": round(total_ligne_vr, 2)
-            })
-
-            for _ in range(nb_lames_total):
-                lames_a_couper.append({"ref": repere, "length": largeur_lame})
-
-        st.table(pd.DataFrame(details_tabliers))
-        st.markdown("#### 💡 Sous-détail des coûts par volet :")
-        st.table(pd.DataFrame(sous_detail_vr))
-        st.success(f"**Montant Total Volets Roulants : {st.session_state.total_volets:,.2f} DA**")
-
-        # --- NOUVEAU : Calcul total Volets ---
-        for t in details_tabliers:
-            cost_lames = (t["Total Lames"] * t["Largeur Lame (mm)"] / 1000.0) * pu_lame
-            cost_moteur = t["Qté Volets"] * pu_moteur if t["Kit Moteur"] == "Oui" else 0
-            cost_acc = t["Qté Volets"] * pu_acc_vr
-            st.session_state.total_volets += (cost_lames + cost_moteur + cost_acc)
-        # -------------------------------------
-
-        st.table(pd.DataFrame(details_tabliers))
-        st.markdown("---")
-        st.markdown('<div class="excel-head-yellow">✂️ Optimisation de Coupe des Lames (5.5m)</div>', unsafe_allow_html=True)
-        
-        if st.button("🚀 Calculer le débit des barres", type="primary"):
             if lames_a_couper:
                 barres_optimisees = optimize_cutting_1d_with_ref(lames_a_couper, longueur_barre_vr, epaisseur_scie_vr)
                 grouped_bars_vr = []
@@ -963,7 +985,6 @@ elif menu_selection == "🏠 Volets Roulants":
                 html_vr += f'<tr style="background-color: #DBEAFE; font-weight: bold;"><td colspan="2" style="text-align: right;">TOTAL BARRES À COMMANDER :</td><td class="center-text">{total_barres_vr}</td><td colspan="2"></td></tr>'
                 html_vr += "</tbody></table>"
                 st.markdown(html_vr, unsafe_allow_html=True)
-
 elif menu_selection == "🚧 Garde-corps (Barres 6m)":
     st.markdown('<div class="section-header no-print">🧮 Module Garde-Corps — Optimisation & Tarification</div>', unsafe_allow_html=True)
     
@@ -1176,30 +1197,92 @@ elif menu_selection == "💰 Mes Prix Unitaires":
 # 📊 NOUVEAU MODULE : DEVIS GLOBAL
 # ==========================================
 elif menu_selection == "📊 Devis Global du Projet":
-    st.markdown('<div class="section-header">📊 Synthèse Financière du Projet</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-header no-print">📊 Synthèse Financière & Devis Global</div>', unsafe_allow_html=True)
     
-    grand_total = (st.session_state.total_alu + st.session_state.total_vitrage + 
-                   st.session_state.total_accessoires + st.session_state.total_volets + 
-                   st.session_state.total_gardecorps)
+    # 1. Champs de saisie pour les frais annexes
+    st.markdown("### ⚙️ Frais Annexes & Taxes")
+    col_mo, col_frais_desc, col_frais_cout, col_tva = st.columns(4)
+    with col_mo:
+        main_oeuvre = st.number_input("Main d'Œuvre (DA)", min_value=0.0, value=st.session_state.get("devis_mo", 0.0), step=1000.0, key="devis_mo")
+    with col_frais_desc:
+        frais_desc = st.text_input("Désignation Frais Sup.", placeholder="Ex: Transport, Grue...", value=st.session_state.get("devis_frais_desc", ""), key="devis_frais_desc")
+    with col_frais_cout:
+        frais_cout = st.number_input("Coût Frais Sup. (DA)", min_value=0.0, value=st.session_state.get("devis_frais_cout", 0.0), step=500.0, key="devis_frais_cout")
+    with col_tva:
+        tva_pct = st.number_input("TVA (%)", min_value=0.0, value=st.session_state.get("devis_tva", 19.0), step=1.0, key="devis_tva")
+
+    st.markdown("---")
     
-    col1, col2 = st.columns([2, 1])
+    # 2. Bouton d'impression
+    titre_pdf_devis = f"Devis_{NOM_PROJET}_{DATE_DU_JOUR}".replace(" ", "_").replace("'", "")
+    components.html(f"""
+        <button onclick="
+            var oldTitle = window.parent.document.title; 
+            window.parent.document.title = '{titre_pdf_devis}'; 
+            setTimeout(function(){{ window.parent.print(); }}, 100);
+            setTimeout(function(){{ window.parent.document.title = oldTitle; }}, 2000);
+        " style="background-color: #10B981; color: white; padding: 12px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 16px; width: 100%; margin-bottom: 20px;">
+        🖨️ IMPRIMER LE DEVIS GLOBAL
+        </button>
+    """, height=70)
+
+    # 3. Calculs
+    total_materiel_ht = (st.session_state.total_alu + st.session_state.total_vitrage + 
+                         st.session_state.total_accessoires + st.session_state.total_volets + 
+                         st.session_state.total_gardecorps)
     
-    with col1:
-        st.markdown("### 📝 Détail par Catégorie")
-        data_devis = [
-            {"Catégorie": "Profilés Aluminium", "Montant (DA)": f"{st.session_state.total_alu:,.2f}"},
-            {"Catégorie": "Vitrages & Miroiterie", "Montant (DA)": f"{st.session_state.total_vitrage:,.2f}"},
-            {"Catégorie": "Accessoires & Joints", "Montant (DA)": f"{st.session_state.total_accessoires:,.2f}"},
-            {"Catégorie": "Volets Roulants", "Montant (DA)": f"{st.session_state.total_volets:,.2f}"},
-            {"Catégorie": "Garde-corps", "Montant (DA)": f"{st.session_state.total_gardecorps:,.2f}"},
-        ]
-        st.dataframe(pd.DataFrame(data_devis), use_container_width=True, hide_index=True)
-        
-    with col2:
-        st.markdown("### 💰 Total HT")
-        st.markdown(f"""
-            <div style="background-color:#1E3A8A; color:white; padding:20px; border-radius:10px; text-align:center;">
-                <span style="font-size:18px;">MONTANT TOTAL DU PROJET</span><br>
-                <span style="font-size:32px; font-weight:bold;">{grand_total:,.2f} DA</span>
-            </div>
-        """, unsafe_allow_html=True)
+    total_ht = total_materiel_ht + main_oeuvre + frais_cout
+    montant_tva = total_ht * (tva_pct / 100.0)
+    total_ttc = total_ht + montant_tva
+
+    # 4. Affichage du document imprimable (HTML)
+    st.markdown(f'<div class="projet-title">DEVIS OFFICIEL : {NOM_PROJET}</div>', unsafe_allow_html=True)
+    
+    html_devis = f"""
+    <table class="print-table" style="width: 100%; margin-bottom: 30px;">
+        <thead>
+            <tr>
+                <th style="background-color: #1E3A8A; color: white; padding: 10px; font-size: 16px;">DÉSIGNATION / RUBRIQUE</th>
+                <th class="center-text" style="background-color: #1E3A8A; color: white; padding: 10px; font-size: 16px; width: 30%;">MONTANT HT (DA)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td><b>1. Profilés Aluminium</b> (Toutes séries confondues)</td><td class="center-text">{st.session_state.total_alu:,.2f}</td></tr>
+            <tr><td><b>2. Vitrages & Miroiterie</b></td><td class="center-text">{st.session_state.total_vitrage:,.2f}</td></tr>
+            <tr><td><b>3. Quincaillerie, Accessoires & Joints</b></td><td class="center-text">{st.session_state.total_accessoires:,.2f}</td></tr>
+            <tr><td><b>4. Volets Roulants</b> (Lames, moteurs, accessoires)</td><td class="center-text">{st.session_state.total_volets:,.2f}</td></tr>
+            <tr><td><b>5. Garde-corps</b> (Profilés & Vitrage)</td><td class="center-text">{st.session_state.total_gardecorps:,.2f}</td></tr>
+            <tr style="background-color: #F3F4F6;">
+                <td style="text-align: right; font-weight: bold; padding-right: 15px;">SOUS-TOTAL MATÉRIEL HT :</td>
+                <td class="center-text" style="font-weight: bold; color: #1E40AF;">{total_materiel_ht:,.2f} DA</td>
+            </tr>
+            <tr><td><b>6. Main d'Œuvre & Pose</b></td><td class="center-text">{main_oeuvre:,.2f}</td></tr>
+    """
+    
+    if frais_cout > 0:
+        designation = frais_desc if frais_desc else "Frais Supplémentaires"
+        html_devis += f'<tr><td><b>7. {designation}</b></td><td class="center-text">{frais_cout:,.2f}</td></tr>'
+
+    html_devis += f"""
+        </tbody>
+    </table>
+    
+    <table class="print-table" style="width: 50%; float: right; font-size: 16px;">
+        <tbody>
+            <tr>
+                <td style="font-weight: bold; text-align: right; padding: 10px;">TOTAL HT :</td>
+                <td class="center-text" style="font-weight: bold; width: 45%;">{total_ht:,.2f} DA</td>
+            </tr>
+            <tr>
+                <td style="text-align: right; padding: 10px;">TVA ({tva_pct}%) :</td>
+                <td class="center-text">{montant_tva:,.2f} DA</td>
+            </tr>
+            <tr style="background-color: #10B981; color: white;">
+                <td style="font-weight: bold; text-align: right; padding: 15px; font-size: 18px;">NET À PAYER TTC :</td>
+                <td class="center-text" style="font-weight: bold; font-size: 18px;">{total_ttc:,.2f} DA</td>
+            </tr>
+        </tbody>
+    </table>
+    <div style="clear: both;"></div>
+    """
+    st.markdown(html_devis, unsafe_allow_html=True)
