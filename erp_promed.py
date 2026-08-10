@@ -637,13 +637,12 @@ if btn_calculer_vitrage:
 
 # 2. On affiche si la variable est en mémoire (même si on change d'onglet)
 if st.session_state.get("afficher_resultats_vitrage", False):
-    edited_project = st.session_state.chassis_rows_v27        # ... (la suite de ton code reste exactement pareille à partir d'ici)
-        list_vitrages = []
-        for index, row in edited_project.iterrows():
-            type_ouvrage = str(row.get("Ouvrage", "")).strip()
-            repere = str(row.get("Repère", "")).strip()
-            if not type_ouvrage or not repere or row["Qté"] <= 0: continue
-            
+    edited_project = st.session_state.chassis_rows_v27
+    list_vitrages = []
+    for index, row in edited_project.iterrows():
+        type_ouvrage = str(row.get("Ouvrage", "")).strip()
+        repere = str(row.get("Repère", "")).strip()
+        if not type_ouvrage or not repere or row["Qté"] <= 0: continue            
             L = float(row["Largeur (L)"])
             H = float(row["Hauteur (H)"])
             qte_ouvrage = int(row["Qté"])
