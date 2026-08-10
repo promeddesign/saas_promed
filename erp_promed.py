@@ -791,6 +791,7 @@ elif menu_selection == "🪟 Carnet de Vitrage":
                 st.session_state.total_vitrage += v["Prix Total (DA)"]
             
             df_vitrage = pd.DataFrame(list_vitrages)
+            st.session_state.list_vitrages_detail = list_vitrages
             surface_projet_totale = df_vitrage["Surf. Totale (m²)"].sum()
             
             html_vitrage = '<table class="print-table" style="width: 100%;"><thead><tr><th>Repère</th><th>Ouvrage</th><th>Détail Vitre</th><th>Type Vitrage</th><th class="center-text">Largeur (mm)</th><th class="center-text">Hauteur (mm)</th><th class="center-text">Qté</th><th class="center-text">Surf. Totale (m²)</th><th class="center-text">Prix Total (DA)</th></tr></thead><tbody>'
@@ -892,6 +893,7 @@ elif menu_selection == "🛒 Quincaillerie & Joints":
         st.markdown('<div class="block-spacer"></div>', unsafe_allow_html=True)
         st.markdown('<div class="excel-head-blue">🔗 QUINCAILLERIE & ACCESSOIRES (CUMUL GLOBAL DU PROJET)</div>', unsafe_allow_html=True)
         if list_accessoires:
+            st.session_state.list_acc_detail = list_accessoires
             df_acc = pd.DataFrame(list_accessoires)
             df_acc["Référence"] = df_acc["Référence"].fillna(""); df_acc["Série"] = df_acc["Série"].fillna("")
             df_acc_grouped = df_acc.groupby(["Série", "Référence", "Désignation"], dropna=False, as_index=False)["Quantité"].sum()
@@ -904,6 +906,7 @@ elif menu_selection == "🛒 Quincaillerie & Joints":
         st.markdown('<div class="block-spacer"></div>', unsafe_allow_html=True)
         st.markdown('<div class="excel-head-gray">〰️ JOINTS & BROSSE (CUMUL GLOBAL DU PROJET)</div>', unsafe_allow_html=True)
         if list_joints:
+            st.session_state.list_joints_detail = list_joints
             df_joints = pd.DataFrame(list_joints)
             df_joints["Référence"] = df_joints["Référence"].fillna(""); df_joints["Série"] = df_joints["Série"].fillna("")
             df_joints_grouped = df_joints.groupby(["Série", "Référence", "Désignation"], dropna=False, as_index=False)["Quantité Totale (m)"].sum()
@@ -925,14 +928,16 @@ elif menu_selection == "🏠 Volets Roulants":
     with col5: epaisseur_scie_vr = st.number_input("Trait scie (mm)", value=5, step=1)
 
     st.markdown("### 💰 2. Saisie des Prix Unitaires (Volets)")
-    c_p1, c_p2, c_p3, c_p4 = st.columns(4)
+    c_p1, c_p2, c_p3, c_p4, c_p5 = st.columns(5)
     with c_p1:
-        pu_barre_lame = st.number_input("Prix barre Lame 5.5m (DA)", min_value=0.0, value=st.session_state.get("vr_pu_lame", 0.0), step=100.0, key="vr_pu_lame")
+        pu_lame_inj = st.number_input("Prix Lame Injectée 5.5m (DA)", min_value=0.0, value=st.session_state.get("vr_pu_lame_inj", 0.0), step=100.0, key="vr_pu_lame_inj")
     with c_p2:
-        pu_acc_mono = st.number_input("Prix Acc. Monobloc (Forfait)", min_value=0.0, value=st.session_state.get("vr_pu_mono", 0.0), step=100.0, key="vr_pu_mono")
+        pu_lame_ext = st.number_input("Prix Lame Extrudée 5.5m (DA)", min_value=0.0, value=st.session_state.get("vr_pu_lame_ext", 0.0), step=100.0, key="vr_pu_lame_ext")
     with c_p3:
-        pu_acc_tun = st.number_input("Prix Acc. Tunnel (Forfait)", min_value=0.0, value=st.session_state.get("vr_pu_tun", 0.0), step=100.0, key="vr_pu_tun")
+        pu_acc_mono = st.number_input("Prix Acc. Monobloc (Forfait)", min_value=0.0, value=st.session_state.get("vr_pu_mono", 0.0), step=100.0, key="vr_pu_mono")
     with c_p4:
+        pu_acc_tun = st.number_input("Prix Acc. Tunnel (Forfait)", min_value=0.0, value=st.session_state.get("vr_pu_tun", 0.0), step=100.0, key="vr_pu_tun")
+    with c_p5:
         pu_moteur = st.number_input("Prix Kit Moteur (Unité)", min_value=0.0, value=st.session_state.get("vr_pu_mot", 0.0), step=100.0, key="vr_pu_mot")
 
     st.markdown("---")
@@ -945,11 +950,10 @@ elif menu_selection == "🏠 Volets Roulants":
         st.markdown("### 🔧 3. Configuration par Châssis")
         st.caption("Définissez le type de lame et si un kit moteur est inclus pour chaque volet.")
 
-        # Initialiser le dict de config en session
         if "vr_config_chassis" not in st.session_state:
             st.session_state.vr_config_chassis = {}
 
-        types_lames_dispo = ["Injectée", "Extrudée", "Perforée", "Micro-perforée", "Bois"]
+        types_lames_dispo = ["Injectée", "Extrudée"]
 
         header_cols = st.columns([1, 2, 2, 2])
         header_cols[0].markdown("**Repère**")
@@ -962,7 +966,7 @@ elif menu_selection == "🏠 Volets Roulants":
             type_vr = str(row.get("Volet Roulant", "")).capitalize()
             if repere not in st.session_state.vr_config_chassis:
                 st.session_state.vr_config_chassis[repere] = {
-                    "type_lame": type_lame,  # défaut = paramètre global
+                    "type_lame": type_lame,
                     "kit_moteur": True
                 }
             cfg = st.session_state.vr_config_chassis[repere]
@@ -978,7 +982,6 @@ elif menu_selection == "🏠 Volets Roulants":
 
     st.markdown("---")
 
-    # Bouton de calcul avec maintien de l'état (évite de tout perdre en changeant d'onglet)
     btn_calculer_vr = st.button("🔄 CALCULER LES VOLETS", type="primary", use_container_width=True)
     if btn_calculer_vr:
         st.session_state.afficher_resultats_vr = True
@@ -991,7 +994,6 @@ elif menu_selection == "🏠 Volets Roulants":
         if df_volets.empty:
             st.info("ℹ️ Aucun volet roulant n'a été détecté dans ce projet.")
         else:
-            # Bouton d'impression
             titre_pdf = f"{NOM_PROJET}_Volets_{DATE_DU_JOUR}".replace(" ", "_").replace("'", "")
             components.html(f"""
                 <button onclick="
@@ -1019,7 +1021,6 @@ elif menu_selection == "🏠 Volets Roulants":
                 qte_chassis = int(row.get("Qté", 1))
                 h_caisson = float(row.get("H Caisson", 0))
 
-                # Récupérer la config par châssis
                 cfg_row = st.session_state.get("vr_config_chassis", {}).get(repere, {"type_lame": type_lame, "kit_moteur": True})
                 kit_moteur = cfg_row["kit_moteur"]
                 type_lame_chassis = cfg_row["type_lame"]
@@ -1032,8 +1033,8 @@ elif menu_selection == "🏠 Volets Roulants":
                 nb_lames_par_tablier = math.ceil(h_tablier / hauteur_lame)
                 nb_lames_total = nb_lames_par_tablier * qte_chassis
 
-
-                # Calcul financier
+                # Calcul financier selon type de lame
+                pu_barre_lame = pu_lame_ext if type_lame_chassis == "Extrudée" else pu_lame_inj
                 longueur_totale_lames_mm = nb_lames_total * largeur_lame
                 nb_barres_lames = longueur_totale_lames_mm / longueur_barre_vr
                 cout_lames = nb_barres_lames * pu_barre_lame
@@ -1046,13 +1047,14 @@ elif menu_selection == "🏠 Volets Roulants":
                 st.session_state.total_volets += total_ligne_vr
 
                 details_tabliers.append({
-                    "Repère": repere, "Type": type_vr.capitalize(), "Largeur Lame (mm)": largeur_lame,
+                    "Repère": repere, "Type": type_vr.capitalize(), "Type Lame": type_lame_chassis, "Largeur Lame (mm)": largeur_lame,
                     "Hauteur Tablier (mm)": h_tablier, "Qté Volets": qte_chassis, "Total Lames": nb_lames_total,
                     "Kit Moteur": "Oui" if kit_moteur else "Non"
                 })
                 
                 sous_detail_vr.append({
                     "Repère": repere,
+                    "Type Lame": type_lame_chassis,
                     "Coût Lames (DA)": round(cout_lames, 2),
                     "Coût Moteur (DA)": round(cout_moteur_ligne, 2),
                     "Coût Accessoires (DA)": round(cout_acc_ligne, 2),
@@ -1061,6 +1063,9 @@ elif menu_selection == "🏠 Volets Roulants":
 
                 for _ in range(nb_lames_total):
                     lames_a_couper.append({"ref": repere, "length": largeur_lame})
+
+            st.session_state.list_volets_detail = details_tabliers
+            st.session_state.list_volets_financier = sous_detail_vr
 
             st.table(pd.DataFrame(details_tabliers))
             st.markdown("#### 💡 Sous-détail des coûts par volet :")
@@ -1322,9 +1327,9 @@ elif menu_selection == "💰 Mes Prix Unitaires":
 elif menu_selection == "📊 Devis Global du Projet":
     st.markdown('<div class="section-header no-print">📊 Synthèse Financière & Devis Global</div>', unsafe_allow_html=True)
     
-    # 1. Champs de saisie pour les frais annexes
+    # 1. Champs de saisie pour les frais annexes avec bouton de réinitialisation/suppression
     st.markdown("### ⚙️ Frais Annexes & Taxes")
-    col_mo, col_frais_desc, col_frais_cout, col_tva = st.columns(4)
+    col_mo, col_frais_desc, col_frais_cout, col_tva, col_reset = st.columns([2, 2, 2, 1, 1.2])
     with col_mo:
         main_oeuvre = st.number_input("Main d'Œuvre (DA)", min_value=0.0, value=st.session_state.get("devis_mo", 0.0), step=1000.0, key="devis_mo")
     with col_frais_desc:
@@ -1333,6 +1338,14 @@ elif menu_selection == "📊 Devis Global du Projet":
         frais_cout = st.number_input("Coût Frais Sup. (DA)", min_value=0.0, value=st.session_state.get("devis_frais_cout", 0.0), step=500.0, key="devis_frais_cout")
     with col_tva:
         tva_pct = st.number_input("TVA (%)", min_value=0.0, value=st.session_state.get("devis_tva", 19.0), step=1.0, key="devis_tva")
+    with col_reset:
+        st.write("")
+        st.write("")
+        if st.button("🗑️ Effacer Frais", use_container_width=True, help="Réinitialiser la main d'œuvre et les frais annexes à 0"):
+            st.session_state.devis_mo = 0.0
+            st.session_state.devis_frais_desc = ""
+            st.session_state.devis_frais_cout = 0.0
+            st.rerun()
 
     st.markdown("---")
     
@@ -1409,3 +1422,50 @@ elif menu_selection == "📊 Devis Global du Projet":
     <div style="clear: both;"></div>
     """
     st.markdown(html_devis, unsafe_allow_html=True)
+
+    # 5. Détail complet des postes par module
+    st.markdown('<div class="block-spacer"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="excel-head-blue">📜 DÉTAIL DÉTAILLÉ DE CHAQUE POSTE DU DEVIS</div>', unsafe_allow_html=True)
+
+    st.markdown("### 🪟 1. Détail Menuiserie Aluminium (Châssis)")
+    if not st.session_state.chassis_rows_v27.empty:
+        st.dataframe(st.session_state.chassis_rows_v27, use_container_width=True)
+    else:
+        st.info("Aucun châssis enregistré.")
+
+    st.markdown("### 💎 2. Détail Vitrage & Miroiterie")
+    list_vit_det = st.session_state.get("list_vitrages_detail", [])
+    if list_vit_det:
+        st.dataframe(pd.DataFrame(list_vit_det), use_container_width=True)
+    else:
+        st.info("Aucun calcul de vitrage n'a été effectué pour le moment (rendez-vous dans le module 'Carnet de Vitrage').")
+
+    st.markdown("### 🛒 3. Détail Quincaillerie, Accessoires & Joints")
+    list_acc_det = st.session_state.get("list_acc_detail", [])
+    list_jnt_det = st.session_state.get("list_joints_detail", [])
+    if list_acc_det:
+        st.markdown("#### Accessoires :")
+        st.dataframe(pd.DataFrame(list_acc_det), use_container_width=True)
+    if list_jnt_det:
+        st.markdown("#### Joints & Brosse :")
+        st.dataframe(pd.DataFrame(list_jnt_det), use_container_width=True)
+    if not list_acc_det and not list_jnt_det:
+        st.info("Aucun calcul d'accessoires n'a été effectué (rendez-vous dans 'Quincaillerie & Joints').")
+
+    st.markdown("### 🏠 4. Détail Volets Roulants")
+    list_vol_det = st.session_state.get("list_volets_detail", [])
+    list_vol_fin = st.session_state.get("list_volets_financier", [])
+    if list_vol_det:
+        st.markdown("#### Détail des Tabliers :")
+        st.dataframe(pd.DataFrame(list_vol_det), use_container_width=True)
+    if list_vol_fin:
+        st.markdown("#### Sous-détail Financier Volets :")
+        st.dataframe(pd.DataFrame(list_vol_fin), use_container_width=True)
+    if not list_vol_det and not list_vol_fin:
+        st.info("Aucun calcul de volet n'a été effectué (rendez-vous dans 'Volets Roulants').")
+
+    st.markdown("### 🚧 5. Détail Garde-corps")
+    if not st.session_state.df_garde_corps.empty:
+        st.dataframe(st.session_state.df_garde_corps, use_container_width=True)
+    else:
+        st.info("Aucun garde-corps renseigné.")
