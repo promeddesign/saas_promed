@@ -643,6 +643,7 @@ if st.session_state.get("afficher_resultats_vitrage", False):
         type_ouvrage = str(row.get("Ouvrage", "")).strip()
         repere = str(row.get("Repère", "")).strip()
         if not type_ouvrage or not repere or row["Qté"] <= 0: continue            
+            
             L = float(row["Largeur (L)"])
             H = float(row["Hauteur (H)"])
             qte_ouvrage = int(row["Qté"])
