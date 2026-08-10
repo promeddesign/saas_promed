@@ -628,76 +628,80 @@ elif menu_selection == "🪟 Carnet de Vitrage":
     else:
         st.info("Aucun type de vitrage spécifique détecté dans les châssis.")
 
-st.markdown("---")
-btn_calculer_vitrage = st.button("🪟 CALCULER LES VITRAGES & PRIX", type="primary", use_container_width=True)
+    btn_calculer_vitrage = st.button("🪟 CALCULER LES VITRAGES & PRIX", type="primary", use_container_width=True)
 
-# 1. On mémorise le clic
-if btn_calculer_vitrage:
-    st.session_state.afficher_resultats_vitrage = True
+    # 1. On mémorise le clic
+    if btn_calculer_vitrage:
+        st.session_state.afficher_resultats_vitrage = True
+        prix_vitrages_saisis_snapshot = {}
+        for t_vitre in prix_vitrages_saisis:
+            prix_vitrages_saisis_snapshot[t_vitre] = prix_vitrages_saisis[t_vitre]
+        st.session_state.prix_vitrages_saisis_snapshot = prix_vitrages_saisis_snapshot
 
-# 2. On affiche si la variable est en mémoire (même si on change d'onglet)
-if st.session_state.get("afficher_resultats_vitrage", False):
-    edited_project = st.session_state.chassis_rows_v27
-    list_vitrages = []
-    for index, row in edited_project.iterrows():
-        type_ouvrage = str(row.get("Ouvrage", "")).strip()
-        repere = str(row.get("Repère", "")).strip()
-        if not type_ouvrage or not repere or row["Qté"] <= 0: continue
+    # 2. On affiche si la variable est en mémoire (même si on change d'onglet)
+    if st.session_state.get("afficher_resultats_vitrage", False):
+        prix_vitrages_calc = st.session_state.get("prix_vitrages_saisis_snapshot", prix_vitrages_saisis)
+        edited_project = st.session_state.chassis_rows_v27
+        list_vitrages = []
+        for index, row in edited_project.iterrows():
+            type_ouvrage = str(row.get("Ouvrage", "")).strip()
+            repere = str(row.get("Repère", "")).strip()
+            if not type_ouvrage or not repere or row["Qté"] <= 0: continue
 
-        L = float(row["Largeur (L)"])
-        H = float(row["Hauteur (H)"])
-        qte_ouvrage = int(row["Qté"])
-        type_vitrage_saisi = str(row.get("Vitrage", "")).strip()
-        if not type_vitrage_saisi: type_vitrage_saisi = "Standard"
-        
-        a_volet = str(row.get("Volet Roulant", "non")).lower()
-        h_caisson = float(row.get("H Caisson", 0.0)) if a_volet == "caisson mono-bloc" else 0.0
+            L = float(row["Largeur (L)"])
+            H = float(row["Hauteur (H)"])
+            qte_ouvrage = int(row["Qté"])
+            type_vitrage_saisi = str(row.get("Vitrage", "")).strip()
+            if not type_vitrage_saisi: type_vitrage_saisi = "Standard"
             
-        vitrage_rows = [comp for comp in BIBLIOTHEQUE if clean_string(comp.get("Type Ouvrage", "")) == clean_string(type_ouvrage) and str(comp.get("Type", "")).strip().lower() in ["vitrage", "verre"]]
-        vitrages_groupes = {}
-        for comp in vitrage_rows:
-            designation = str(comp.get("Composant", "Vitrage")).strip()
-            f_vit = str(comp.get("Formule Long", "")).upper().replace('=', '').replace('X', '*')
-            if not f_vit: f_vit = str(comp.get("Formule Coupe", "")).upper().replace('=', '').replace('X', '*')
-            qte_comp = safe_float(comp.get("Qté", 1), 1.0)
-            qte_totale = int(qte_comp * qte_ouvrage)
-            base_des = designation.replace("Largeur", "").replace("largeur", "").replace("Hauteur", "").replace("hauteur", "").replace(" L", "").replace(" H", "").strip()
-            if not base_des or base_des == "-": base_des = "Vitrage Ouvrage"
-            if base_des not in vitrages_groupes: vitrages_groupes[base_des] = {"L": 0, "H": 0, "qte": qte_totale}
-            
-            if '*' in f_vit and 'L' in f_vit and 'H' in f_vit:
-                parts = f_vit.split('*')
-                for p in parts:
-                    if 'L' in p: vitrages_groupes[base_des]["L"] = evaluer_formule(p, L, H, h_caisson, designation)
-                    elif 'H' in p: vitrages_groupes[base_des]["H"] = evaluer_formule(p, L, H, h_caisson, designation)
-                vitrages_groupes[base_des]["qte"] = max(vitrages_groupes[base_des]["qte"], qte_totale)
-            else:
-                val = evaluer_formule(f_vit, L, H, h_caisson, designation)
-                if 'L' in f_vit or "LARGEUR" in designation.upper() or designation.upper().endswith(" L"):
-                    vitrages_groupes[base_des]["L"] = val
-                    vitrages_groupes[base_des]["qte"] = max(vitrages_groupes[base_des]["qte"], qte_totale)
-                elif 'H' in f_vit or "HAUTEUR" in designation.upper() or designation.upper().endswith(" H"):
-                    vitrages_groupes[base_des]["H"] = val
+            a_volet = str(row.get("Volet Roulant", "non")).lower()
+            h_caisson = float(row.get("H Caisson", 0.0)) if a_volet == "caisson mono-bloc" else 0.0
+                
+            vitrage_rows = [comp for comp in BIBLIOTHEQUE if clean_string(comp.get("Type Ouvrage", "")) == clean_string(type_ouvrage) and str(comp.get("Type", "")).strip().lower() in ["vitrage", "verre"]]
+            vitrages_groupes = {}
+            for comp in vitrage_rows:
+                designation = str(comp.get("Composant", "Vitrage")).strip()
+                f_vit = str(comp.get("Formule Long", "")).upper().replace('=', '').replace('X', '*')
+                if not f_vit: f_vit = str(comp.get("Formule Coupe", "")).upper().replace('=', '').replace('X', '*')
+                qte_comp = safe_float(comp.get("Qté", 1), 1.0)
+                qte_totale = int(qte_comp * qte_ouvrage)
+                base_des = designation.replace("Largeur", "").replace("largeur", "").replace("Hauteur", "").replace("hauteur", "").replace(" L", "").replace(" H", "").strip()
+                if not base_des or base_des == "-": base_des = "Vitrage Ouvrage"
+                if base_des not in vitrages_groupes: vitrages_groupes[base_des] = {"L": 0, "H": 0, "qte": qte_totale}
+                
+                if '*' in f_vit and 'L' in f_vit and 'H' in f_vit:
+                    parts = f_vit.split('*')
+                    for p in parts:
+                        if 'L' in p: vitrages_groupes[base_des]["L"] = evaluer_formule(p, L, H, h_caisson, designation)
+                        elif 'H' in p: vitrages_groupes[base_des]["H"] = evaluer_formule(p, L, H, h_caisson, designation)
                     vitrages_groupes[base_des]["qte"] = max(vitrages_groupes[base_des]["qte"], qte_totale)
                 else:
-                    if "HAUTEUR" in designation.upper() or "H" in designation.upper(): vitrages_groupes[base_des]["H"] = val
-                    else: vitrages_groupes[base_des]["L"] = val
-                    vitrages_groupes[base_des]["qte"] = max(vitrages_groupes[base_des]["qte"], qte_totale)
+                    val = evaluer_formule(f_vit, L, H, h_caisson, designation)
+                    if 'L' in f_vit or "LARGEUR" in designation.upper() or designation.upper().endswith(" L"):
+                        vitrages_groupes[base_des]["L"] = val
+                        vitrages_groupes[base_des]["qte"] = max(vitrages_groupes[base_des]["qte"], qte_totale)
+                    elif 'H' in f_vit or "HAUTEUR" in designation.upper() or designation.upper().endswith(" H"):
+                        vitrages_groupes[base_des]["H"] = val
+                        vitrages_groupes[base_des]["qte"] = max(vitrages_groupes[base_des]["qte"], qte_totale)
+                    else:
+                        if "HAUTEUR" in designation.upper() or "H" in designation.upper(): vitrages_groupes[base_des]["H"] = val
+                        else: vitrages_groupes[base_des]["L"] = val
+                        vitrages_groupes[base_des]["qte"] = max(vitrages_groupes[base_des]["qte"], qte_totale)
 
-        for base_des, v_data in vitrages_groupes.items():
-            v_L = v_data["L"]
-            v_H = v_data["H"]
-            if v_L == 0: v_L = v_H
-            if v_H == 0: v_H = v_L
-            if v_L > 0 and v_H > 0:
-                surf_u = (v_L * v_H) / 1000000.0
-                surf_tot = surf_u * v_data["qte"]
-                list_vitrages.append({
-                    "Repère": repere, "Ouvrage": type_ouvrage, "Désignation": base_des,
-                    "Type Vitrage": type_vitrage_saisi,
-                    "Largeur (mm)": int(v_L), "Hauteur (mm)": int(v_H), "Qté": v_data["qte"],
-                    "Surf. U. (m²)": round(surf_u, 2), "Surf. Totale (m²)": round(surf_tot, 2)
-                })
+            for base_des, v_data in vitrages_groupes.items():
+                v_L = v_data["L"]
+                v_H = v_data["H"]
+                if v_L == 0: v_L = v_H
+                if v_H == 0: v_H = v_L
+                if v_L > 0 and v_H > 0:
+                    surf_u = (v_L * v_H) / 1000000.0
+                    surf_tot = surf_u * v_data["qte"]
+                    list_vitrages.append({
+                        "Repère": repere, "Ouvrage": type_ouvrage, "Désignation": base_des,
+                        "Type Vitrage": type_vitrage_saisi,
+                        "Largeur (mm)": int(v_L), "Hauteur (mm)": int(v_H), "Qté": v_data["qte"],
+                        "Surf. U. (m²)": round(surf_u, 2), "Surf. Totale (m²)": round(surf_tot, 2)
+                    })
 
         st.markdown(f'<div class="projet-title">PROJET : {NOM_PROJET}</div>', unsafe_allow_html=True)
         st.markdown('<div class="excel-head-blue">🪟 CARNET DE VITRAGE (COMMANDE MIROITIER & PRIX)</div>', unsafe_allow_html=True)
@@ -706,7 +710,7 @@ if st.session_state.get("afficher_resultats_vitrage", False):
             st.session_state.total_vitrage = 0.0
             for v in list_vitrages:
                 t_vitre = v["Type Vitrage"]
-                pu_m2 = prix_vitrages_saisis.get(t_vitre, 0.0)
+                pu_m2 = prix_vitrages_calc.get(t_vitre, 0.0)
                 v["Prix Total (DA)"] = v["Surf. Totale (m²)"] * pu_m2
                 st.session_state.total_vitrage += v["Prix Total (DA)"]
             
@@ -721,7 +725,6 @@ if st.session_state.get("afficher_resultats_vitrage", False):
             st.markdown(html_vitrage.replace('\n', ''), unsafe_allow_html=True)
         else:
             st.info("Aucun vitrage n'a été détecté.")
-            # -------------------------------
 
 elif menu_selection == "🛒 Quincaillerie & Joints":
     st.markdown('<div class="section-header no-print">🛒 Quincaillerie & Joints (Accessoires)</div>', unsafe_allow_html=True)
