@@ -404,6 +404,45 @@ if menu_selection == "📝 Saisie des Ouvrages":
 
     st.markdown("### ⚡ 2. Dimensions & Ajout rapide")
 
+    # JS : Entrée = passer au champ suivant (comme Tab)
+    components.html("""
+    <script>
+    (function() {
+        function setupEnterNav() {
+            var doc = window.parent.document;
+            var inputs = Array.from(doc.querySelectorAll(
+                'input[type="number"], input[type="text"], input[aria-label]'
+            )).filter(function(el) {
+                return el.offsetParent !== null;  // visible seulement
+            });
+
+            inputs.forEach(function(input, idx) {
+                if (input.dataset.enterNav) return;
+                input.dataset.enterNav = "1";
+                input.addEventListener("keydown", function(e) {
+                    if (e.key === "Enter") {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        var allInputs = Array.from(doc.querySelectorAll(
+                            'input[type="number"], input[type="text"]'
+                        )).filter(function(el) { return el.offsetParent !== null; });
+                        var cur = allInputs.indexOf(document.activeElement !== null ? doc.activeElement : this);
+                        if (cur === -1) cur = allInputs.indexOf(this);
+                        var next = allInputs[cur + 1];
+                        if (next) { next.focus(); next.select(); }
+                    }
+                });
+            });
+        }
+
+        // Lancer au chargement et re-lancer périodiquement (Streamlit rerend le DOM)
+        setupEnterNav();
+        var _interval = setInterval(setupEnterNav, 800);
+        setTimeout(function() { clearInterval(_interval); }, 15000);
+    })();
+    </script>
+    """, height=0)
+
     col1, col2, col3 = st.columns(3)
     with col1:
         n_largeur = st.number_input("Largeur (L) mm", min_value=100.0, value=1000.0, step=10.0, key="inp_largeur")
