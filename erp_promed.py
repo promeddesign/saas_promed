@@ -404,48 +404,35 @@ if menu_selection == "📝 Saisie des Ouvrages":
 
     st.markdown("### ⚡ 2. Dimensions & Ajout rapide")
 
-    # Initialisation des valeurs en session_state pour qu'elles ne s'effacent pas
-    if "form_largeur" not in st.session_state: st.session_state.form_largeur = 1000.0
-    if "form_hauteur" not in st.session_state: st.session_state.form_hauteur = 1000.0
-    if "form_qte" not in st.session_state: st.session_state.form_qte = 1
-    if "form_vitrage" not in st.session_state: st.session_state.form_vitrage = ""
-    if "form_volet" not in st.session_state: st.session_state.form_volet = "non"
-    if "form_h_caisson" not in st.session_state: st.session_state.form_h_caisson = 0.0
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        n_largeur = st.number_input("Largeur (L) mm", min_value=100.0, value=1000.0, step=10.0, key="inp_largeur")
+        n_hauteur = st.number_input("Hauteur (H) mm", min_value=100.0, value=1000.0, step=10.0, key="inp_hauteur")
+    with col2:
+        n_qte = st.number_input("Quantité", min_value=1, value=1, step=1, key="inp_qte")
+        n_vitrage = st.text_input("Vitrage", placeholder="ex: 4/16/4", key="inp_vitrage")
+    with col3:
+        n_volet = st.selectbox("Volet Roulant", options=["non", "caisson tunnel", "caisson mono-bloc"], key="inp_volet")
+        n_h_caisson = st.number_input("H Caisson mm (si applicable)", min_value=0.0, value=0.0, step=10.0, key="inp_h_caisson")
 
-    with st.form("form_ajout_rapide", clear_on_submit=False):
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            n_largeur = st.number_input("Largeur (L) mm", min_value=100.0, value=st.session_state.form_largeur, step=10.0, key="_form_largeur")
-            n_hauteur = st.number_input("Hauteur (H) mm", min_value=100.0, value=st.session_state.form_hauteur, step=10.0, key="_form_hauteur")
-        with col2:
-            n_qte = st.number_input("Quantité", min_value=1, value=st.session_state.form_qte, step=1, key="_form_qte")
-            n_vitrage = st.text_input("Vitrage", value=st.session_state.form_vitrage, placeholder="ex: 4/16/4", key="_form_vitrage")
-        with col3:
-            volet_options = ["non", "caisson tunnel", "caisson mono-bloc"]
-            volet_idx = volet_options.index(st.session_state.form_volet) if st.session_state.form_volet in volet_options else 0
-            n_volet = st.selectbox("Volet Roulant", options=volet_options, index=volet_idx, key="_form_volet")
-            n_h_caisson = st.number_input("H Caisson mm (si applicable)", min_value=0.0, value=st.session_state.form_h_caisson, step=10.0, key="_form_h_caisson")
-        submit_ajout = st.form_submit_button("➕ Ajouter ce châssis au projet", type="primary", use_container_width=True)
+    submit_ajout = st.button("➕ Ajouter ce châssis au projet", type="primary", use_container_width=True)
 
-        if submit_ajout:
-            # Sauvegarder les valeurs dans session_state avant l'ajout
-            st.session_state.form_largeur = float(n_largeur)
-            st.session_state.form_hauteur = float(n_hauteur)
-            st.session_state.form_qte = int(n_qte)
-            st.session_state.form_vitrage = n_vitrage
-            st.session_state.form_volet = n_volet
-            st.session_state.form_h_caisson = float(n_h_caisson)
-            nouvelle_ligne = pd.DataFrame([{
-                "Repère": "", "Gamme": sel_gamme, "Série": sel_serie, "Ouvrage": sel_ouvrage,
-                "Largeur (L)": float(n_largeur), "Hauteur (H)": float(n_hauteur), "Qté": int(n_qte),
-                "Volet Roulant": n_volet, "H Caisson": float(n_h_caisson), "Vitrage": n_vitrage
-            }])
-            if "Gamme" not in st.session_state.chassis_rows_v27.columns:
-                st.session_state.chassis_rows_v27["Gamme"] = sel_gamme
-                st.session_state.chassis_rows_v27["Série"] = sel_serie
-            st.session_state.chassis_rows_v27 = pd.concat([st.session_state.chassis_rows_v27, nouvelle_ligne], ignore_index=True)
-            st.session_state.chassis_rows_v27 = generer_reperes_auto(st.session_state.chassis_rows_v27)
-            st.rerun()
+    if submit_ajout:
+        nouvelle_ligne = pd.DataFrame([{
+            "Repère": "", "Gamme": sel_gamme, "Série": sel_serie, "Ouvrage": sel_ouvrage,
+            "Largeur (L)": float(st.session_state.inp_largeur),
+            "Hauteur (H)": float(st.session_state.inp_hauteur),
+            "Qté": int(st.session_state.inp_qte),
+            "Volet Roulant": st.session_state.inp_volet,
+            "H Caisson": float(st.session_state.inp_h_caisson),
+            "Vitrage": st.session_state.inp_vitrage
+        }])
+        if "Gamme" not in st.session_state.chassis_rows_v27.columns:
+            st.session_state.chassis_rows_v27["Gamme"] = sel_gamme
+            st.session_state.chassis_rows_v27["Série"] = sel_serie
+        st.session_state.chassis_rows_v27 = pd.concat([st.session_state.chassis_rows_v27, nouvelle_ligne], ignore_index=True)
+        st.session_state.chassis_rows_v27 = generer_reperes_auto(st.session_state.chassis_rows_v27)
+        st.rerun()
 
     st.markdown("---")
     st.markdown("### 📋 Listing des châssis (Modifiable)")
