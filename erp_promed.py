@@ -904,7 +904,48 @@ elif menu_selection == "🏠 Volets Roulants":
         pu_moteur = st.number_input("Prix Kit Moteur (Unité)", min_value=0.0, value=st.session_state.get("vr_pu_mot", 0.0), step=100.0, key="vr_pu_mot")
 
     st.markdown("---")
-    
+
+    # --- Configuration par châssis ---
+    df_projet_config = st.session_state.chassis_rows_v27
+    df_volets_config = df_projet_config[df_projet_config["Volet Roulant"].str.lower() != "non"].dropna(subset=["Volet Roulant"])
+
+    if not df_volets_config.empty:
+        st.markdown("### 🔧 3. Configuration par Châssis")
+        st.caption("Définissez le type de lame et si un kit moteur est inclus pour chaque volet.")
+
+        # Initialiser le dict de config en session
+        if "vr_config_chassis" not in st.session_state:
+            st.session_state.vr_config_chassis = {}
+
+        types_lames_dispo = ["Injectée", "Extrudée", "Perforée", "Micro-perforée", "Bois"]
+
+        header_cols = st.columns([1, 2, 2, 2])
+        header_cols[0].markdown("**Repère**")
+        header_cols[1].markdown("**Type Volet**")
+        header_cols[2].markdown("**Type de Lame**")
+        header_cols[3].markdown("**🔌 Kit Moteur**")
+
+        for idx, row in df_volets_config.iterrows():
+            repere = str(row.get("Repère", f"V{idx}"))
+            type_vr = str(row.get("Volet Roulant", "")).capitalize()
+            if repere not in st.session_state.vr_config_chassis:
+                st.session_state.vr_config_chassis[repere] = {
+                    "type_lame": type_lame,  # défaut = paramètre global
+                    "kit_moteur": True
+                }
+            cfg = st.session_state.vr_config_chassis[repere]
+            c0, c1, c2, c3 = st.columns([1, 2, 2, 2])
+            c0.markdown(f"**{repere}**")
+            c1.markdown(f"*{type_vr}*")
+            lame_idx = types_lames_dispo.index(cfg["type_lame"]) if cfg["type_lame"] in types_lames_dispo else 0
+            new_lame = c2.selectbox("", options=types_lames_dispo, index=lame_idx,
+                                    key=f"lame_{repere}_{idx}", label_visibility="collapsed")
+            new_moteur = c3.checkbox("Inclure", value=cfg["kit_moteur"],
+                                     key=f"moteur_{repere}_{idx}")
+            st.session_state.vr_config_chassis[repere] = {"type_lame": new_lame, "kit_moteur": new_moteur}
+
+    st.markdown("---")
+
     # Bouton de calcul avec maintien de l'état (évite de tout perdre en changeant d'onglet)
     btn_calculer_vr = st.button("🔄 CALCULER LES VOLETS", type="primary", use_container_width=True)
     if btn_calculer_vr:
@@ -946,6 +987,11 @@ elif menu_selection == "🏠 Volets Roulants":
                 qte_chassis = int(row.get("Qté", 1))
                 h_caisson = float(row.get("H Caisson", 0))
 
+                # Récupérer la config par châssis
+                cfg_row = st.session_state.get("vr_config_chassis", {}).get(repere, {"type_lame": type_lame, "kit_moteur": True})
+                kit_moteur = cfg_row["kit_moteur"]
+                type_lame_chassis = cfg_row["type_lame"]
+
                 largeur_lame = max(0.0, L - jeu_coulisses)
                 if "tunnel" in type_vr: h_tablier = H + h_caisson
                 else: h_tablier = H
@@ -954,7 +1000,6 @@ elif menu_selection == "🏠 Volets Roulants":
                 nb_lames_par_tablier = math.ceil(h_tablier / hauteur_lame)
                 nb_lames_total = nb_lames_par_tablier * qte_chassis
 
-                kit_moteur = True # Par défaut, on peut le rendre dynamique si besoin
 
                 # Calcul financier
                 longueur_totale_lames_mm = nb_lames_total * largeur_lame
