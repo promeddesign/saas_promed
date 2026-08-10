@@ -629,16 +629,15 @@ elif menu_selection == "🪟 Carnet de Vitrage":
         st.info("Aucun type de vitrage spécifique détecté dans les châssis.")
 
 st.markdown("---")
-btn_calculer_vitrage = st.button("🔄 CALCULER LES VITRAGES & PRIX", type="primary", use_container_width=True)
+btn_calculer_vitrage = st.button("🪟 CALCULER LES VITRAGES & PRIX", type="primary", use_container_width=True)
 
-    # 1. On mémorise le clic
-    if btn_calculer_vitrage:
-        st.session_state.afficher_resultats_vitrage = True
+# 1. On mémorise le clic
+if btn_calculer_vitrage:
+    st.session_state.afficher_resultats_vitrage = True
 
-    # 2. On affiche si la variable est en mémoire (même si on change d'onglet)
-    if st.session_state.get("afficher_resultats_vitrage", False):
-        edited_project = st.session_state.chassis_rows_v27
-        # ... (la suite de ton code reste exactement pareille à partir d'ici)
+# 2. On affiche si la variable est en mémoire (même si on change d'onglet)
+if st.session_state.get("afficher_resultats_vitrage", False):
+    edited_project = st.session_state.chassis_rows_v27        # ... (la suite de ton code reste exactement pareille à partir d'ici)
         list_vitrages = []
         for index, row in edited_project.iterrows():
             type_ouvrage = str(row.get("Ouvrage", "")).strip()
