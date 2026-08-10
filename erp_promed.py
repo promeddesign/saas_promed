@@ -717,17 +717,6 @@ elif menu_selection == "🪟 Carnet de Vitrage":
         else:
             st.info("Aucun vitrage n'a été détecté.")
             # -------------------------------
-            
-            df_vitrage = pd.DataFrame(list_vitrages)
-            surface_projet_totale = df_vitrage["Surf. Totale (m²)"].sum()
-            html_vitrage = '<table class="print-table" style="width: 100%;"><thead><tr><th>Repère</th><th>Ouvrage</th><th>Détail Vitre</th><th>Type Vitrage</th><th class="center-text">Largeur (mm)</th><th class="center-text">Hauteur (mm)</th><th class="center-text">Qté</th><th class="center-text">Surf. Totale (m²)</th><th class="center-text">Prix Total (DA)</th></tr></thead><tbody>'
-            for idx, v in df_vitrage.iterrows():
-                html_vitrage += f'<tr><td><b>{v["Repère"]}</b></td><td>{v["Ouvrage"]}</td><td>{v["Désignation"]}</td><td>{v["Type Vitrage"]}</td><td class="center-text" style="color: #1E40AF; font-weight:bold;">{v["Largeur (mm)"]}</td><td class="center-text" style="color: #DC2626; font-weight:bold;">{v["Hauteur (mm)"]}</td><td class="center-text" style="font-weight:bold; font-size:15px;">{v["Qté"]}</td><td class="center-text">{v["Surf. Totale (m²)"]:.2f}</td><td class="center-text">{v["Prix Total (DA)"]:.2f}</td></tr>'
-            html_vitrage += f'<tr style="background-color: #DBEAFE; font-weight: bold;"><td colspan="7" style="text-align: right;">TOTAL GLOBAL VITRAGE :</td><td class="center-text">{surface_projet_totale:.2f} m²</td><td class="center-text">{st.session_state.total_vitrage:.2f} DA</td></tr>'
-            html_vitrage += '</tbody></table>'
-            st.markdown(html_vitrage.replace('\n', ''), unsafe_allow_html=True)
-        else:
-            st.info("Aucun vitrage n'a été détecté. Vérifiez vos données de saisie.")
 
 elif menu_selection == "🛒 Quincaillerie & Joints":
     st.markdown('<div class="section-header no-print">🛒 Quincaillerie & Joints (Accessoires)</div>', unsafe_allow_html=True)
