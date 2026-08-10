@@ -75,10 +75,34 @@ def optimize_cutting_1d_with_ref(cuts_list, bar_length=6000, blade_width=5):
         if not placed: bars.append([cut])
     return bars
 
+def sanitize_chassis_df(df=None):
+    expected_cols = ["Repère", "Gamme", "Série", "Ouvrage", "Largeur (L)", "Hauteur (H)", "Qté", "Volet Roulant", "H Caisson", "Vitrage"]
+    if df is None or not isinstance(df, pd.DataFrame):
+        df = pd.DataFrame(columns=expected_cols)
+    
+    for col in expected_cols:
+        if col not in df.columns:
+            df[col] = None
+
+    df = df[expected_cols].copy()
+
+    df["Repère"] = df["Repère"].fillna("").astype(str)
+    df["Gamme"] = df["Gamme"].fillna("-").astype(str)
+    df["Série"] = df["Série"].fillna("-").astype(str)
+    df["Ouvrage"] = df["Ouvrage"].fillna("-").astype(str)
+    df["Largeur (L)"] = pd.to_numeric(df["Largeur (L)"], errors='coerce').fillna(1000.0).astype(float)
+    df["Hauteur (H)"] = pd.to_numeric(df["Hauteur (H)"], errors='coerce').fillna(1000.0).astype(float)
+    df["Qté"] = pd.to_numeric(df["Qté"], errors='coerce').fillna(1).astype(int)
+    
+    valid_volets = ["non", "caisson tunnel", "caisson mono-bloc"]
+    df["Volet Roulant"] = df["Volet Roulant"].astype(str).apply(lambda x: x if x.lower() in valid_volets else "non")
+    df["H Caisson"] = pd.to_numeric(df["H Caisson"], errors='coerce').fillna(0.0).astype(float)
+    df["Vitrage"] = df["Vitrage"].fillna("").astype(str)
+
+    return df
+
 def get_default_df():
-    return pd.DataFrame(columns=[
-        "Repère", "Gamme", "Série", "Ouvrage", "Largeur (L)", "Hauteur (H)", "Qté", "Volet Roulant", "H Caisson", "Vitrage"
-    ])
+    return sanitize_chassis_df(pd.DataFrame())
 
 def fetch_entreprise_info(ent_id):
     try:
@@ -322,10 +346,7 @@ if st.sidebar.button("Charger ce projet", use_container_width=True):
                 else:
                     df_charge = pd.DataFrame(raw_data)
                 
-                if "Gamme" not in df_charge.columns: df_charge["Gamme"] = choix_gammes_dynamiques[0]
-                if "Série" not in df_charge.columns: df_charge["Série"] = choix_series_dynamiques[0]
-                colonnes_ordre = ["Repère", "Gamme", "Série", "Ouvrage", "Largeur (L)", "Hauteur (H)", "Qté", "Volet Roulant", "H Caisson", "Vitrage"]
-                df_charge = df_charge.reindex(columns=colonnes_ordre)
+                df_charge = sanitize_chassis_df(df_charge)
                 
                 st.session_state.chassis_rows_v27 = df_charge
                 st.session_state.current_project_name = projet_selectionne
@@ -476,14 +497,25 @@ if menu_selection == "📝 Saisie des Ouvrages":
     st.markdown("---")
     st.markdown("### 📋 Listing des châssis (Modifiable)")
     
+    # Sécuriser les options pour st.data_editor (évite les incompatibilités de types ou valeurs absentes des selectbox)
+    st.session_state.chassis_rows_v27 = sanitize_chassis_df(st.session_state.chassis_rows_v27)
+    
+    opts_gammes = sorted(list(set(global_gammes + [x for x in st.session_state.chassis_rows_v27["Gamme"].unique() if x and x != "-"])))
+    opts_series = sorted(list(set(global_series + [x for x in st.session_state.chassis_rows_v27["Série"].unique() if x and x != "-"])))
+    opts_ouvrages = sorted(list(set(global_ouvrages + [x for x in st.session_state.chassis_rows_v27["Ouvrage"].unique() if x and x != "-"])))
+
+    if not opts_gammes: opts_gammes = ["-"]
+    if not opts_series: opts_series = ["-"]
+    if not opts_ouvrages: opts_ouvrages = ["-"]
+
     edited_df = st.data_editor(
         st.session_state.chassis_rows_v27,
         num_rows="dynamic",
         column_config={
             "Repère": st.column_config.TextColumn("N° (Auto)", disabled=True, width="small"),
-            "Gamme": st.column_config.SelectboxColumn("Gamme", options=global_gammes),
-            "Série": st.column_config.SelectboxColumn("Série", options=global_series),
-            "Ouvrage": st.column_config.SelectboxColumn("Ouvrage", options=global_ouvrages),
+            "Gamme": st.column_config.SelectboxColumn("Gamme", options=opts_gammes),
+            "Série": st.column_config.SelectboxColumn("Série", options=opts_series),
+            "Ouvrage": st.column_config.SelectboxColumn("Ouvrage", options=opts_ouvrages),
             "Volet Roulant": st.column_config.SelectboxColumn(options=["non", "caisson tunnel", "caisson mono-bloc"]),
             "Vitrage": st.column_config.TextColumn("Vitrage (ex: 4/16/4)"),
         },
