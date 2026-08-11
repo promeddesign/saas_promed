@@ -150,7 +150,59 @@ def load_user_prices(entreprise_id):
     except Exception as e:
         print("Erreur chargement prix:", e)
     return prix_dict
+def sync_user_prices(entreprise_id, bibliotheque):
+    """
+    Vérifie la bibliothèque et insère automatiquement les références manquantes 
+    dans la table prix_unitaires pour l'entreprise donnée, en nettoyant le nom du composant.
+    """
+    if not entreprise_id or not bibliotheque:
+        return
 
+    try:
+        refs_biblio = {}
+        for item in bibliotheque:
+            ref = str(item.get("Ref", "")).strip().upper()
+            
+            if ref and ref != "-":
+                if ref not in refs_biblio:
+                    comp_raw = str(item.get("Composant", "")).strip()
+                    comp_clean = re.sub(r'\s+(Largeur|Hauteur|LARGEUR|HAUTEUR)$', '', comp_raw).strip()
+
+                    refs_biblio[ref] = {
+                        "gamme": item.get("Gamme", ""),
+                        "serie": item.get("Série", ""),
+                        "composant": comp_clean, 
+                        "type_article": item.get("Type", ""),
+                        "unite": item.get("Unité", "U")
+                    }
+
+        if not refs_biblio:
+            return
+
+        res = supabase.table("prix_unitaires").select("ref_composant").eq("entreprise_id", entreprise_id).execute()
+        refs_existantes = {str(row["ref_composant"]).strip().upper() for row in res.data if row.get("ref_composant")}
+
+        lignes_a_inserer = []
+        for ref, data in refs_biblio.items():
+            if ref not in refs_existantes:
+                lignes_a_inserer.append({
+                    "entreprise_id": entreprise_id,
+                    "ref_composant": ref,
+                    "gamme": data["gamme"],
+                    "serie": data["serie"],
+                    "composant": data["composant"],
+                    "type_article": data["type_article"],
+                    "unite": data["unite"],
+                    "prix_unitaire": 0.0  
+                })
+
+        if lignes_a_inserer:
+            supabase.table("prix_unitaires").insert(lignes_a_inserer).execute()
+            if "prix_entreprise" in st.session_state:
+                del st.session_state["prix_entreprise"]
+
+    except Exception as e:
+        print("Erreur synchronisation prix_unitaires :", e)
 def logout():
     supabase.auth.sign_out()
     for key in ["user", "access_token", "refresh_token", "entreprise_id", "user_nom", "nom_entreprise"]:
@@ -533,8 +585,11 @@ elif menu_selection == "📐 Fiche Atelier & Débit":
     with col1: LONGUEUR_BRUTE = st.number_input("Longueur brute de barre (mm)", value=6500)
     with col2: EPAISSEUR_SCIE = st.number_input("Trait de scie (mm)", value=5)
     btn_generer = st.button("⚡ GENERER LES PARCELLES COLORÉES", type="primary", use_container_width=True)
-
+    
     if btn_generer:
+        st.session_state.afficher_resultats_debit = True
+
+    if st.session_state.get("afficher_resultats_debit", False):
         edited_project = st.session_state.chassis_rows_v27
         dict_global_coupes = {}
         lignes_fiche_atelier = []
@@ -614,14 +669,10 @@ elif menu_selection == "📐 Fiche Atelier & Débit":
                     st.markdown(html_pivot.replace('\n', ''), unsafe_allow_html=True)
 
             st.markdown('<div class="block-spacer"></div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="excel-head-blue">✂️ REPARTITION REELLE DANS LES BARRES DE {int(LONGUEUR_BRUTE)} mm</div>', unsafe_allow_html=True)
+            st.markdown('<div class="excel-head-blue">✂️ OPTIMISATION ET PARCELLES COLORÉES DE COUPE</div>', unsafe_allow_html=True)
+            html_coupes = '<table class="print-table" style="width: 100%;"><thead><tr><th style="width: 12%;">Référence</th><th style="width: 58%;">Plan Visualisé (Longueur Utile + Chute)</th><th style="width: 8%;" class="center-text">Qté</th><th style="width: 8%;" class="center-text">Utile</th><th style="width: 7%;" class="center-text">Chute</th><th style="width: 7%;" class="center-text">% Perte</th></tr></thead><tbody>'
             dict_total_barres_achetees = {}
-            last_gamme_affichee = None
-            html_coupes = '<table class="print-table" style="width: 100%;"><thead><tr><th style="width: 16%; text-align: center;">RÉFÉRENCE</th><th style="width: 50%; text-align: center;">PLAN DE COUPE</th><th style="width: 5%; text-align: center;">QTÉ</th><th style="width: 9%; text-align: center;">UTILE</th><th style="width: 9%; text-align: center;">CHUTE</th><th style="width: 11%; text-align: center;">% PERTE</th></tr></thead><tbody>'
             for (serie, ref), coupes in sorted(dict_global_coupes.items(), key=lambda x: (x[0][0], x[0][1])):
-                if serie != last_gamme_affichee:
-                    html_coupes += f'<tr style="background-color: #4B5563; color: white; font-weight: bold; border-bottom: 2px solid #111827;"><td colspan="6" style="padding: 8px 10px;">GAMME / SÉRIE : {serie.upper()}</td></tr>'
-                    last_gamme_affichee = serie
                 coupes_triees = sorted(coupes, key=lambda x: x["longueur"], reverse=True)
                 barres_brutes = []
                 for c in coupes_triees:
@@ -665,16 +716,24 @@ elif menu_selection == "📐 Fiche Atelier & Débit":
             
             st.markdown('<div class="block-spacer"></div>', unsafe_allow_html=True)
             st.markdown('<div class="excel-head-green">📦 RÉCAPITULATIF DE COMMANDE DES PROFILÉS</div>', unsafe_allow_html=True)
-            html_recap = '<table class="print-table" style="width: 50%;"><thead><tr><th>Gamme / Série</th><th>Référence Alu</th><th class="center-text">Total de barres (' + str(LONGUEUR_BRUTE/1000) + 'm)</th></tr></thead><tbody>'
+            html_recap = '<table class="print-table" style="width: 100%;"><thead><tr><th>Série</th><th>Référence Alu</th><th class="center-text">Total Barres (' + str(LONGUEUR_BRUTE/1000) + 'm)</th><th class="center-text">Prix Unitaire Barre (DA)</th><th class="center-text">Total HT (DA)</th></tr></thead><tbody>'
             
             # --- CALCUL DU DEVIS ALU ---
             st.session_state.total_alu = 0.0
+            list_profils_commande = []
             for (serie, ref), qte_b in dict_total_barres_achetees.items():
-                html_recap += f"<tr><td>{serie}</td><td>{ref}</td><td class='center-text' style='font-weight: bold;'>{qte_b}</td></tr>"
                 pu_barre = st.session_state.prix_entreprise.get(ref, 0.0)
-                st.session_state.total_alu += (qte_b * pu_barre)
-            # ---------------------------
+                tot_profil_ht = qte_b * pu_barre
+                st.session_state.total_alu += tot_profil_ht
+                list_profils_commande.append({
+                    "Série": serie, "Référence": ref, "Quantité Barres": qte_b,
+                    "Prix Unitaire (DA)": pu_barre, "Total HT (DA)": tot_profil_ht
+                })
+                html_recap += f"<tr><td>{serie}</td><td><b>{ref}</b></td><td class='center-text' style='font-weight: bold;'>{qte_b}</td><td class='center-text'>{pu_barre:,.2f} DA</td><td class='center-text' style='font-weight: bold; color:#047857;'>{tot_profil_ht:,.2f} DA</td></tr>"
+            
+            html_recap += f'<tr style="background-color: #D1FAE5; font-weight: bold;"><td colspan="4" style="text-align: right;">TOTAL COMMANDES PROFILÉS :</td><td class="center-text" style="color:#065F46; font-size:16px;">{st.session_state.total_alu:,.2f} DA</td></tr>'
             html_recap += "</tbody></table>"
+            st.session_state.list_profils_commande = list_profils_commande
             st.markdown(html_recap.replace('\n', ''), unsafe_allow_html=True)
         else:
             st.error("⚠️ Aucun profilé de type 'Barre' trouvé pour cet ouvrage.")
@@ -1150,7 +1209,11 @@ elif menu_selection == "🚧 Garde-corps (Barres 6m)":
 
     st.write("---")
 
-    if st.button("🚀 Générer le plan de coupe & calculer le devis", type="primary", use_container_width=True):
+    btn_calculer_gc = st.button("🚀 Générer le plan de coupe & calculer le devis", type="primary", use_container_width=True)
+    if btn_calculer_gc:
+        st.session_state.afficher_resultats_gc = True
+
+    if st.session_state.get("afficher_resultats_gc", False):
         st.session_state.df_garde_corps = edited_df_gc.copy()
         cuts_list = []
         for idx, row in edited_df_gc.iterrows():
@@ -1214,13 +1277,12 @@ elif menu_selection == "🚧 Garde-corps (Barres 6m)":
                     {"Élément": f"Vitrages Garde-Corps ({surface_verre_totale_m2:.2f} m²)", "Montant": f"{cout_verre_gc:,.2f} DA"},
                     {"Élément": "TOTAL GARDE-CORPS", "Montant": f"{st.session_state.total_gardecorps:,.2f} DA"}
                 ]))
-
-                st.subheader("📊 Résumé du débit")
-                m1, m2, m3 = st.columns(3)
-                m1.metric("Barres totales à commander", f"{total_bars} Unités")
-                m2.metric("Longueur utile totale", f"{total_utile / 1000:.2f} ml")
-                m3.metric("Taux de perte global", f"{perte_pct:.1f} %")
                 st.write("---")
+
+                # Palette de couleurs pour les coupes garde-corps
+                couleurs_palette_gc = ["#3B82F6", "#EF4444", "#10B981", "#F59E0B", "#8B5CF6", "#EC4899", "#6366F1", "#14B8A6"]
+                reps_uniques_gc = list(set([c['ref'] for c in cuts_list]))
+                map_couleurs_gc = {rep: couleurs_palette_gc[i % len(couleurs_palette_gc)] for i, rep in enumerate(reps_uniques_gc)}
 
                 html_garde_corps = '<table class="print-table" style="width: 100%;"><thead><tr><th style="width: 10%; text-align: center;">TYPE BARRE</th><th style="width: 50%; text-align: center;">PLAN DE COUPE VISUEL</th><th style="width: 8%; text-align: center;">QTÉ</th><th style="width: 10%; text-align: center;">UTILE (mm)</th><th style="width: 10%; text-align: center;">CHUTE (mm)</th><th style="width: 12%; text-align: center;">% PERTE</th></tr></thead><tbody>'
                 b_idx = 1
@@ -1255,71 +1317,85 @@ elif menu_selection == "🛠️ Gestionnaire de Bibliothèque":
 
 elif menu_selection == "💰 Mes Prix Unitaires":
     st.markdown('<div class="section-header no-print">💰 Gestion de mes Prix Unitaires</div>', unsafe_allow_html=True)
-    st.info("Modifiez ici les prix spécifiques à votre entreprise. Ces prix serviront pour vos devis et calculs de rentabilité.")
+    st.info("Modifiez ici les prix spécifiques à votre entreprise. Les nouvelles références de la bibliothèque sont ajoutées automatiquement.")
 
+    # 🔄 Synchronisation automatique des nouvelles références
+    sync_user_prices(st.session_state.entreprise_id, BIBLIOTHEQUE)
+
+    # Charger les prix à jour pour le reste de la session
     st.session_state.prix_entreprise = load_user_prices(st.session_state.entreprise_id)
 
-    lignes_prix = []
-    refs_vues = set()
-
-    for item in BIBLIOTHEQUE:
-        ref = str(item.get("Ref", "")).strip().upper()
-        if not ref or ref == "-": continue 
+    # Récupérer directement les lignes de la table prix_unitaires
+    res_prix = supabase.table("prix_unitaires").select("*").eq("entreprise_id", st.session_state.entreprise_id).execute()
+    
+    if res_prix.data:
+        df_prix = pd.DataFrame(res_prix.data)
         
-        if ref not in refs_vues:
-            refs_vues.add(ref)
-            prix_actuel = st.session_state.prix_entreprise.get(ref, 0.0)
-            comp_affiche = str(item.get("Composant", "")).replace(" Largeur", "").replace(" Hauteur", "").strip()
-            lignes_prix.append({
-                "Gamme": item.get("Gamme", ""), "Série": item.get("Série", ""),
-                "Type Article": item.get("Type", ""), "Composant": comp_affiche,
-                "Réf": ref, "Unité": item.get("Unité", "U"), "Prix Unitaire": prix_actuel
-            })
+        df_prix = df_prix.rename(columns={
+            "gamme": "Gamme",
+            "serie": "Série",
+            "type_article": "Type Article",
+            "composant": "Composant",
+            "ref_composant": "Réf",
+            "unite": "Unité",
+            "prix_unitaire": "Prix Unitaire"
+        })
+        
+        cols_display = ["Gamme", "Série", "Type Article", "Composant", "Réf", "Unité", "Prix Unitaire"]
+        cols_existantes = [c for c in cols_display if c in df_prix.columns]
+        df_prix_display = df_prix[cols_existantes]
 
-    # Ajout manuel des références virtuelles utilisées pour les calculs spéciaux (volets, moteur, etc.)
-    lignes_prix.append({"Gamme": "Général", "Série": "-", "Type Article": "VR", "Composant": "Lame Volet (Mètre)", "Réf": "LAME", "Unité": "m", "Prix Unitaire": st.session_state.prix_entreprise.get("LAME", 0.0)})
-    lignes_prix.append({"Gamme": "Général", "Série": "-", "Type Article": "VR", "Composant": "Kit Moteur", "Réf": "MOTEUR", "Unité": "U", "Prix Unitaire": st.session_state.prix_entreprise.get("MOTEUR", 0.0)})
-    lignes_prix.append({"Gamme": "Général", "Série": "-", "Type Article": "VR", "Composant": "Forfait Acc. VR", "Réf": "ACC_VR", "Unité": "U", "Prix Unitaire": st.session_state.prix_entreprise.get("ACC_VR", 0.0)})
-    lignes_prix.append({"Gamme": "Général", "Série": "-", "Type Article": "Barre", "Composant": "Profilé Garde-Corps", "Réf": "PROFIL_GC", "Unité": "Barre", "Prix Unitaire": st.session_state.prix_entreprise.get("PROFIL_GC", 0.0)})
+        # Ajout manuel des références virtuelles (s'ils ne sont pas en base)
+        refs_virtuelles = [
+            {"Gamme": "Général", "Série": "-", "Type Article": "VR", "Composant": "Lame Volet (Mètre)", "Réf": "LAME", "Unité": "m", "Prix Unitaire": st.session_state.prix_entreprise.get("LAME", 0.0)},
+            {"Gamme": "Général", "Série": "-", "Type Article": "VR", "Composant": "Kit Moteur", "Réf": "MOTEUR", "Unité": "U", "Prix Unitaire": st.session_state.prix_entreprise.get("MOTEUR", 0.0)},
+            {"Gamme": "Général", "Série": "-", "Type Article": "VR", "Composant": "Forfait Acc. VR", "Réf": "ACC_VR", "Unité": "U", "Prix Unitaire": st.session_state.prix_entreprise.get("ACC_VR", 0.0)},
+            {"Gamme": "Général", "Série": "-", "Type Article": "Barre", "Composant": "Profilé Garde-Corps", "Réf": "PROFIL_GC", "Unité": "Barre", "Prix Unitaire": st.session_state.prix_entreprise.get("PROFIL_GC", 0.0)}
+        ]
+        
+        df_virtuelles = pd.DataFrame(refs_virtuelles)
+        df_prix_display = pd.concat([df_prix_display, df_virtuelles], ignore_index=True)
 
-    df_prix = pd.DataFrame(lignes_prix)
+        edited_df_prix = st.data_editor(
+            df_prix_display,
+            use_container_width=True,
+            disabled=["Gamme", "Série", "Type Article", "Composant", "Réf", "Unité"],
+            column_config={
+                "Prix Unitaire": st.column_config.NumberColumn("Prix Unitaire", min_value=0.0, format="%.2f DA")
+            },
+            height=600
+        )
 
-    st.markdown("### 📋 Grille tarifaire de mon entreprise")
-    edited_df_prix = st.data_editor(
-        df_prix,
-        use_container_width=True,
-        disabled=["Gamme", "Série", "Type Article", "Composant", "Réf", "Unité"], 
-        column_config={
-            "Prix Unitaire": st.column_config.NumberColumn("Prix Unitaire", min_value=0.0, format="%.2f DA")
-        },
-        height=600
-    )
+        if st.button("💾 Enregistrer ma grille tarifaire", type="primary", use_container_width=True):
+            with st.spinner("Mise à jour des prix..."):
+                try:
+                    for idx, row in edited_df_prix.iterrows():
+                        ref = row["Réf"]
+                        pu = float(row["Prix Unitaire"])
+                        
+                        if ref in ["LAME", "MOTEUR", "ACC_VR", "PROFIL_GC"]:
+                            res_virtuel = supabase.table("prix_unitaires").select("id").eq("entreprise_id", st.session_state.entreprise_id).eq("ref_composant", ref).execute()
+                            if res_virtuel.data:
+                                supabase.table("prix_unitaires").update({"prix_unitaire": pu}).eq("entreprise_id", st.session_state.entreprise_id).eq("ref_composant", ref).execute()
+                            else:
+                                supabase.table("prix_unitaires").insert({
+                                    "entreprise_id": st.session_state.entreprise_id, "ref_composant": ref, "composant": row["Composant"],
+                                    "gamme": row["Gamme"], "serie": row["Série"], "type_article": row["Type Article"], "unite": row["Unité"], "prix_unitaire": pu
+                                }).execute()
+                        else:
+                            supabase.table("prix_unitaires")\
+                                .update({"prix_unitaire": pu})\
+                                .eq("entreprise_id", st.session_state.entreprise_id)\
+                                .eq("ref_composant", ref)\
+                                .execute()
 
-    if st.button("💾 Enregistrer ma grille tarifaire", type="primary", use_container_width=True):
-        with st.spinner("Sauvegarde en cours..."):
-            lignes_a_sauvegarder = []
-            entreprise_id = st.session_state.entreprise_id
-
-            for idx, row in edited_df_prix.iterrows():
-                pu = float(row["Prix Unitaire"])
-                if pu > 0:
-                    lignes_a_sauvegarder.append({
-                        "entreprise_id": entreprise_id,
-                        "gamme": row["Gamme"], "serie": row["Série"],
-                        "composant": row["Composant"], "ref_composant": row["Réf"],
-                        "type_article": row["Type Article"], "unite": row["Unité"],
-                        "prix_unitaire": pu
-                    })
-
-            try:
-                supabase.table("prix_unitaires").delete().eq("entreprise_id", entreprise_id).execute()
-                if lignes_a_sauvegarder:
-                    supabase.table("prix_unitaires").insert(lignes_a_sauvegarder).execute()
-                st.session_state.prix_entreprise = load_user_prices(entreprise_id)
-                st.success("✅ Vos prix ont été sauvegardés avec succès !")
-                st.rerun()
-            except Exception as e:
-                st.error(f"🔴 Erreur lors de la sauvegarde : {e}")
+                    st.session_state.prix_entreprise = load_user_prices(st.session_state.entreprise_id)
+                    st.success("✅ Vos prix ont été sauvegardés avec succès !")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"🔴 Erreur lors de la sauvegarde : {e}")
+    else:
+        st.warning("Aucune référence trouvée.")
 
 # ==========================================
 # 📊 NOUVEAU MODULE : DEVIS GLOBAL
