@@ -361,7 +361,10 @@ st.markdown("""
 # 6. MENU LATÉRAL - GESTION PROJETS
 # ==========================================
 st.sidebar.header("📁 Gestion des Projets")
-st.session_state.liste_projets_sauvegardes = fetch_project_list()
+
+# Chargement optimisé de la liste des projets (en session)
+if "liste_projets_sauvegardes" not in st.session_state:
+    st.session_state.liste_projets_sauvegardes = fetch_project_list()
 projets_existants = st.session_state.liste_projets_sauvegardes
 
 nouveau_projet = st.sidebar.text_input("➕ Créer un nouveau projet :", placeholder="Ex: Villa Dupont")
@@ -446,42 +449,14 @@ if st.session_state.get("confirm_delete_project_id"):
 
 st.sidebar.markdown("---")
 
-# --- TABLEAU DES PROJETS DANS LE MENU LATÉRAL ---
+# --- TABLEAU DÉTAILLÉ DES PROJETS DANS LE MENU LATÉRAL ---
 with st.sidebar.expander("📋 Tableau des Projets", expanded=False):
     if projets_existants:
-        for p in projets_existants:
-            p_id = p["id"]
-            p_nom = p["nom_projet"]
-            is_active = (st.session_state.current_project_id == p_id)
-            prefix = "⭐ " if is_active else "📄 "
-            
-            c_txt, c_act1, c_act2 = st.columns([3, 1, 1])
-            c_txt.markdown(f"{prefix}**{p_nom}**")
-            if c_act1.button("📂", key=f"tbl_load_{p_id}", help=f"Charger {p_nom}"):
-                try:
-                    response = supabase.table("projets").select("donnees").eq("id", p_id).eq("entreprise_id", st.session_state.entreprise_id).execute()
-                    if response.data:
-                        raw_data = response.data[0]["donnees"]
-                        if isinstance(raw_data, dict) and "chassis" in raw_data:
-                            df_charge = pd.DataFrame(raw_data["chassis"])
-                            df_gc_charge = pd.DataFrame(raw_data.get("garde_corps", []))
-                            if not df_gc_charge.empty:
-                                st.session_state.df_garde_corps = df_gc_charge
-                        else:
-                            df_charge = pd.DataFrame(raw_data)
-                        
-                        df_charge = sanitize_chassis_df(df_charge)
-                        st.session_state.chassis_rows_v27 = df_charge
-                        st.session_state.current_project_name = p_nom
-                        st.session_state.current_project_id = p_id
-                        st.rerun()
-                except Exception as e:
-                    st.sidebar.error(f"Erreur: {e}")
-
-            if c_act2.button("🗑️", key=f"tbl_del_{p_id}", help=f"Supprimer {p_nom}"):
-                st.session_state["confirm_delete_project_id"] = p_id
-                st.session_state["confirm_delete_project_name"] = p_nom
-                st.rerun()
+        df_p = pd.DataFrame(projets_existants)
+        if "nom_projet" in df_p.columns:
+            df_p["Actif"] = df_p["id"].apply(lambda x: "⭐" if st.session_state.current_project_id == x else "")
+            df_display = df_p.rename(columns={"nom_projet": "Nom du Projet"})[["Actif", "Nom du Projet"]]
+            st.dataframe(df_display, use_container_width=True, hide_index=True)
     else:
         st.caption("Aucun projet enregistré.")
 
