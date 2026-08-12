@@ -1363,7 +1363,35 @@ elif menu_selection == "🚧 Garde-corps":
 
 elif menu_selection == "🛠️ Gestionnaire de Bibliothèque":
     st.markdown('<div class="section-header no-print">🛠️ Catalogue Actuel Emporté</div>', unsafe_allow_html=True)
-    st.dataframe(pd.DataFrame(BIBLIOTHEQUE), use_container_width=True)
+    
+    # 1. Convertir la variable en DataFrame Pandas
+    df_biblio = pd.DataFrame(BIBLIOTHEQUE)
+    
+    # 2. Enlever la colonne PU (Cherche 'PU' ou '↓ PU' en ignorant la casse)
+    cols_to_drop = [col for col in df_biblio.columns if 'PU' in col.upper()]
+    df_biblio = df_biblio.drop(columns=cols_to_drop, errors='ignore')
+    
+    # 3. Créer une interface de filtres dynamiques au-dessus du tableau
+    # Liste des colonnes que vous souhaitez rendre filtrables
+    colonnes_filtrables = ['Gamme', 'Type Ouvrage', 'Série', 'Composant'] 
+    
+    # Aligner les filtres sur une seule ligne
+    cols = st.columns(len(colonnes_filtrables))
+    
+    for i, col_name in enumerate(colonnes_filtrables):
+        # Vérifier que la colonne existe bien dans les données
+        if col_name in df_biblio.columns:
+            with cols[i]:
+                # Liste déroulante à choix multiples (multiselect)
+                options = df_biblio[col_name].dropna().unique().tolist()
+                selection = st.multiselect(f"Filtre : {col_name}", options=options)
+                
+                # Si l'utilisateur sélectionne un ou plusieurs filtres, on réduit le DataFrame
+                if selection:
+                    df_biblio = df_biblio[df_biblio[col_name].isin(selection)]
+                    
+    # 4. Afficher le DataFrame final filtré (sans la colonne PU)
+    st.dataframe(df_biblio, use_container_width=True, hide_index=True)
 
 elif menu_selection == "💰 Mes Prix Unitaires":
     st.markdown('<div class="section-header no-print">💰 Gestion de mes Prix Unitaires</div>', unsafe_allow_html=True)
