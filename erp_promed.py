@@ -766,9 +766,6 @@ elif menu_selection == "📐 Fiche Atelier & Débit":
             html_coupes += "</tbody></table>"
             st.markdown(html_pivot.replace('\n', ''), unsafe_allow_html=True)
 
-# -------------------------------------------------------------------------
-# 👉 C'EST ICI QUE DOIT COMMENCER DIRECTEMENT LE NOUVEAU BLOC :
-# -------------------------------------------------------------------------
             from itertools import groupby
 
 st.markdown('<div class="block-spacer"></div>', unsafe_allow_html=True)
