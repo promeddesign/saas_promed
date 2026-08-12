@@ -564,8 +564,6 @@ if menu_selection == "📝 Saisie des Ouvrages":
 
         // Lancer au chargement et re-lancer périodiquement (Streamlit rerend le DOM)
         setupEnterNav();
-        var _interval = setInterval(setupEnterNav, 800);
-        setTimeout(function() { clearInterval(_interval); }, 15000);
     })();
     </script>
     """, height=0)
@@ -629,9 +627,7 @@ if menu_selection == "📝 Saisie des Ouvrages":
     )
     
     df_auto_calcule = generer_reperes_auto(edited_df)
-    if len(edited_df) != len(st.session_state.chassis_rows_v27) or not edited_df["Repère"].equals(df_auto_calcule["Repère"]):
-        st.session_state.chassis_rows_v27 = df_auto_calcule
-        st.rerun()
+    st.session_state.chassis_rows_v27 = df_auto_calcule
 
 elif menu_selection == "📐 Fiche Atelier & Débit":
     st.markdown('<div class="section-header no-print">📏 Configuration de Coupe</div>', unsafe_allow_html=True)
