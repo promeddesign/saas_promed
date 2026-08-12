@@ -484,10 +484,11 @@ menu_selection = st.sidebar.radio(
         "🪟 Carnet de Vitrage", 
         "🛒 Quincaillerie & Joints", 
         "🏠 Volets Roulants", 
-        "🚧 Garde-corps (Barres 6m)",
+        "🚧 Garde-corps",
+        "📊 Devis Global du Projet"
         "🛠️ Gestionnaire de Bibliothèque", 
         "💰 Mes Prix Unitaires",
-        "📊 Devis Global du Projet"
+        
     ]
 )
 
@@ -1030,7 +1031,6 @@ elif menu_selection == "🏠 Volets Roulants":
     st.markdown("### ⚙️ 1. Paramètres du Tablier")
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1: hauteur_lame = st.number_input("Hauteur lame (mm)", value=43.0, step=1.0)
-    with col2: type_lame = st.selectbox("Type de lame", ["Injectée", "Extrudée"])
     with col3: jeu_coulisses = st.number_input("Jeu coulisses (mm)", value=0.0, step=1.0)
     with col4: longueur_barre_vr = st.number_input("Lg barre lame (mm)", value=5500, step=100)
     with col5: epaisseur_scie_vr = st.number_input("Trait scie (mm)", value=5, step=1)
@@ -1221,7 +1221,7 @@ elif menu_selection == "🏠 Volets Roulants":
                 html_vr += f'<tr style="background-color: #DBEAFE; font-weight: bold;"><td colspan="2" style="text-align: right;">TOTAL BARRES À COMMANDER :</td><td class="center-text">{total_barres_vr}</td><td colspan="2"></td></tr>'
                 html_vr += "</tbody></table>"
                 st.markdown(html_vr, unsafe_allow_html=True)
-elif menu_selection == "🚧 Garde-corps (Barres 6m)":
+elif menu_selection == "🚧 Garde-corps":
     st.markdown('<div class="section-header no-print">🧮 Module Garde-Corps — Optimisation & Tarification</div>', unsafe_allow_html=True)
     
     st.subheader("1. Configuration de la barre brute de profilé")
