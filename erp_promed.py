@@ -764,6 +764,11 @@ elif menu_selection == "📐 Fiche Atelier & Débit":
                     b_idx += 1
                 html_coupes += f'<tr style="background-color: #F9FAFB; font-weight: bold; border-bottom: 2px solid #D1D5DB;"><td>TOTAL {ref}</td><td colspan="5">{total_barres_pour_ref} Barre(s) ({serie.upper()}) de {int(LONGUEUR_BRUTE)} mm</td></tr>'
             html_coupes += "</tbody></table>"
+            st.markdown(html_pivot.replace('\n', ''), unsafe_allow_html=True)
+
+# -------------------------------------------------------------------------
+# 👉 C'EST ICI QUE DOIT COMMENCER DIRECTEMENT LE NOUVEAU BLOC :
+# -------------------------------------------------------------------------
             from itertools import groupby
 
 st.markdown('<div class="block-spacer"></div>', unsafe_allow_html=True)
