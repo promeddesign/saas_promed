@@ -633,133 +633,46 @@ elif menu_selection == "📐 Fiche Atelier & Débit":
                         for _ in range(qte_totale_morceaux):
                             dict_global_coupes[cle_ref].append({"longueur": longueur_coupe, "repere": repere, "composant": designation_profil})
                         lignes_fiche_atelier.append({
-                            "Série": la_serie, "Repère": repere, "Repère/Qté": repere_qte_display,
+                            "Série": la_serie, "Repère/Qté": repere_qte_display,
                             "ColHeader": col_header_riche, "Valeur": f"{int(longueur_coupe)}/{qte_totale_morceaux}"
                         })
 
         if match_trouve:
             st.markdown('<div class="section-header no-print">📐 Visualisation Documents d\'Atelier</div>', unsafe_allow_html=True)
-
-            # Bouton impression globale
             titre_pdf = f"{NOM_PROJET}_Fiche_Atelier_{DATE_DU_JOUR}".replace(" ", "_").replace("'", "")
             components.html(f"""
                 <button onclick="
-                    var oldTitle = window.parent.document.title;
-                    window.parent.document.title = '{titre_pdf}';
+                    var oldTitle = window.parent.document.title; 
+                    window.parent.document.title = '{titre_pdf}'; 
                     setTimeout(function(){{ window.parent.print(); }}, 100);
                     setTimeout(function(){{ window.parent.document.title = oldTitle; }}, 2000);
                 " style="background-color: #EF4444; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 14px; width: 100%;">
-                🖨️ IMPRIMER TOUTE LA FICHE D'ATELIER (PDF)
+                🖨️ IMPRIMER LA FICHE D'ATELIER (Enregistrer en PDF)
                 </button>
             """, height=60)
 
             st.markdown(f'<div class="projet-title">PROJET : {NOM_PROJET}</div>', unsafe_allow_html=True)
-
-            # === AFFICHAGE PAR REPÈRE ===
+            st.markdown('<div class="excel-head-yellow">DETAIL PAR REPERE CHASSIS</div>', unsafe_allow_html=True)
             df_lignes = pd.DataFrame(lignes_fiche_atelier)
-            reperes_ordre = []
-            for _, row_p in edited_project.iterrows():
-                rep_p = str(row_p.get("Repère", "")).strip()
-                if rep_p and rep_p not in reperes_ordre:
-                    reperes_ordre.append(rep_p)
+            if not df_lignes.empty:
+                for serie in df_lignes['Série'].unique():
+                    df_serie = df_lignes[df_lignes['Série'] == serie]
+                    df_pivot = df_serie.pivot_table(index='Repère/Qté', columns='ColHeader', values='Valeur', aggfunc=lambda x: ' + '.join(x)).fillna("")
+                    html_pivot = f'<div class="badge-serie">DÉBIT PAR CHÂSSIS :<br>{serie.upper()}</div><table class="print-table" style="margin-top: 0;"><thead><tr><th class="yellow-head" style="width: 120px;">REPÈRE / Qté<br><span style="font-size:10px; font-weight:normal;">Type Ouvrage</span></th>'
+                    for col in df_pivot.columns: html_pivot += f'<th class="yellow-head">{col}</th>'
+                    html_pivot += "</tr></thead><tbody>"
+                    for rep, row_data in df_pivot.iterrows():
+                        html_pivot += f'<tr><td style="font-weight: bold; text-align: center;">{rep}</td>'
+                        for col in df_pivot.columns: html_pivot += f'<td class="center-text">{row_data[col]}</td>'
+                        html_pivot += "</tr>"
+                    html_pivot += "</tbody></table>"
+                    st.markdown(html_pivot.replace('\n', ''), unsafe_allow_html=True)
 
-            for repere_courant in reperes_ordre:
-                rows_c = edited_project[edited_project["Repère"] == repere_courant]
-                if rows_c.empty: continue
-                row_chassis = rows_c.iloc[0]
-                type_ouvrage_c = str(row_chassis.get("Ouvrage", "")).strip()
-                L_c = float(row_chassis["Largeur (L)"])
-                H_c = float(row_chassis["Hauteur (H)"])
-                qte_c = int(row_chassis["Qté"])
-
-                # Bloc encadré par repère
-                st.markdown(f"""<div style="border:2px solid #1E3A8A;border-radius:8px;margin:24px 0;page-break-inside:avoid;overflow:hidden;">
-                <div style="background:linear-gradient(90deg,#1E3A8A,#3B82F6);color:white;padding:10px 16px;font-weight:bold;font-size:15px;">
-                📋 REPÈRE : {repere_courant} — {type_ouvrage_c} &nbsp;| {int(L_c)} × {int(H_c)} mm &nbsp;| Qté : {qte_c}
-                </div><div style="padding:12px;">""", unsafe_allow_html=True)
-
-                # Bouton impression par repère
-                titre_rep = f"{NOM_PROJET}_{repere_courant}_{DATE_DU_JOUR}".replace(" ", "_").replace("'", "")
-                components.html(f"""
-                    <button onclick="window.parent.print();"
-                    style="background:#3B82F6;color:white;padding:6px 16px;border:none;border-radius:4px;cursor:pointer;font-weight:bold;font-size:13px;margin-bottom:8px;">
-                    🖨️ Imprimer Repère {repere_courant}
-                    </button>
-                """, height=42)
-
-                # --- FICHE ATELIER pour ce repère ---
-                if not df_lignes.empty and "Repère" in df_lignes.columns and repere_courant in df_lignes["Repère"].values:
-                    st.markdown('<div class="excel-head-yellow">DÉTAIL PAR REPÈRE CHÂSSIS</div>', unsafe_allow_html=True)
-                    df_rep = df_lignes[df_lignes["Repère"] == repere_courant]
-                    for serie in df_rep['Série'].unique():
-                        df_serie_r = df_rep[df_rep['Série'] == serie]
-                        df_pivot = df_serie_r.pivot_table(index='Repère/Qté', columns='ColHeader', values='Valeur', aggfunc=lambda x: ' + '.join(x)).fillna("")
-                        html_pivot = f'<div class="badge-serie">DÉBIT CHÂSSIS : {serie.upper()}</div><table class="print-table" style="margin-top:0;"><thead><tr><th class="yellow-head" style="width:120px;">REPÈRE / Qté<br><span style="font-size:10px;font-weight:normal;">Type Ouvrage</span></th>'
-                        for col in df_pivot.columns: html_pivot += f'<th class="yellow-head">{col}</th>'
-                        html_pivot += "</tr></thead><tbody>"
-                        for rep_idx, row_data in df_pivot.iterrows():
-                            html_pivot += f'<tr><td style="font-weight:bold;text-align:center;">{rep_idx}</td>'
-                            for col in df_pivot.columns: html_pivot += f'<td class="center-text">{row_data[col]}</td>'
-                            html_pivot += "</tr>"
-                        html_pivot += "</tbody></table>"
-                        st.markdown(html_pivot.replace('\n', ''), unsafe_allow_html=True)
-
-                # --- FICHE DE COUPE pour ce repère ---
-                coupes_repere_dict = {}
-                for (serie, ref), all_coupes in dict_global_coupes.items():
-                    coupes_filtrees = [c for c in all_coupes if c["repere"] == repere_courant]
-                    if coupes_filtrees:
-                        coupes_repere_dict[(serie, ref)] = coupes_filtrees
-
-                if coupes_repere_dict:
-                    st.markdown('<div class="excel-head-blue">✂️ FICHE DE COUPE</div>', unsafe_allow_html=True)
-                    html_coupes_rep = '<table class="print-table" style="width:100%;"><thead><tr><th style="width:12%;">Référence</th><th style="width:58%;">Plan Visualisé</th><th style="width:8%;" class="center-text">Qté</th><th style="width:8%;" class="center-text">Utile (mm)</th><th style="width:7%;" class="center-text">Chute (mm)</th><th style="width:7%;" class="center-text">% Perte</th></tr></thead><tbody>'
-                    for (serie_r, ref_r), coupes_r in sorted(coupes_repere_dict.items()):
-                        coupes_triees_r = sorted(coupes_r, key=lambda x: x["longueur"], reverse=True)
-                        barres_rep = []
-                        for c in coupes_triees_r:
-                            placed = False
-                            for b in barres_rep:
-                                espace = sum([m["longueur"] for m in b]) + len(b) * EPAISSEUR_SCIE
-                                if (c["longueur"] + EPAISSEUR_SCIE) <= (LONGUEUR_BRUTE - espace):
-                                    b.append(c); placed = True; break
-                            if not placed: barres_rep.append([c])
-                        grouped_r = []
-                        for b in barres_rep:
-                            matched_r = False
-                            for gb in grouped_r:
-                                if len(b) == len(gb['pieces']):
-                                    is_id = all(p1['longueur'] == p2['longueur'] for p1, p2 in zip(b, gb['pieces']))
-                                    if is_id: gb['qty'] += 1; matched_r = True; break
-                            if not matched_r: grouped_r.append({'pieces': b, 'qty': 1})
-                        total_b_r = 0; b_idx_r = 1
-                        for gb in grouped_r:
-                            barre_r = gb['pieces']; qte_b_r = gb['qty']; total_b_r += qte_b_r
-                            somme_p = sum([m["longueur"] for m in barre_r]); somme_s = len(barre_r) * EPAISSEUR_SCIE
-                            tot_cons = somme_p + somme_s; chute_r = max(0, LONGUEUR_BRUTE - tot_cons)
-                            pct_r = (chute_r / LONGUEUR_BRUTE) * 100
-                            div_r = '<div class="bar-container">'
-                            for m_c in barre_r:
-                                coul = map_couleurs.get(m_c["repere"], "#3B82F6")
-                                pw = ((m_c["longueur"] + EPAISSEUR_SCIE) / LONGUEUR_BRUTE) * 100
-                                div_r += f'<div class="bar-segment" style="width:{pw}%;background-color:{coul};" title="{m_c["repere"]}-{m_c["composant"]} ({int(m_c["longueur"])}mm)">{int(m_c["longueur"])}</div>'
-                            if chute_r > 0: div_r += f'<div class="bar-chute" style="width:{(chute_r/LONGUEUR_BRUTE)*100}%;"></div>'
-                            div_r += '</div>'
-                            html_coupes_rep += f'<tr><td class="center-text">{ref_r} (B{b_idx_r})</td><td style="padding:4px;">{div_r}</td><td class="center-text" style="font-weight:bold;">{qte_b_r}</td><td class="center-text">{int(tot_cons)}</td><td class="center-text">{int(chute_r)}</td><td class="center-text">{pct_r:.1f}%</td></tr>'
-                            b_idx_r += 1
-                        html_coupes_rep += f'<tr style="background-color:#F9FAFB;font-weight:bold;border-bottom:2px solid #D1D5DB;"><td>TOTAL {ref_r}</td><td colspan="5">{total_b_r} Barre(s) ({serie_r.upper()}) de {int(LONGUEUR_BRUTE)} mm</td></tr>'
-                    html_coupes_rep += "</tbody></table>"
-                    st.markdown(html_coupes_rep.replace('\n', ''), unsafe_allow_html=True)
-
-                st.markdown('</div></div>', unsafe_allow_html=True)  # Fermer le bloc repère
-
-            # === RÉCAPITULATIF GLOBAL DE COMMANDE DES PROFILÉS ===
             st.markdown('<div class="block-spacer"></div>', unsafe_allow_html=True)
-            st.markdown('<div class="excel-head-green">📦 RÉCAPITULATIF DE COMMANDE DES PROFILÉS</div>', unsafe_allow_html=True)
-            html_recap = '<table class="print-table" style="width: 100%;"><thead><tr><th>Série</th><th>Référence Alu</th><th class="center-text">Total Barres (' + str(LONGUEUR_BRUTE/1000) + 'm)</th><th class="center-text">Prix Unitaire Barre (DA)</th><th class="center-text">Total HT (DA)</th></tr></thead><tbody>'
-            # Calcul dict_total_barres_achetees (optimisation globale par référence)
+            st.markdown('<div class="excel-head-blue">✂️ OPTIMISATION ET PARCELLES COLORÉES DE COUPE</div>', unsafe_allow_html=True)
+            html_coupes = '<table class="print-table" style="width: 100%;"><thead><tr><th style="width: 12%;">Référence</th><th style="width: 58%;">Plan Visualisé (Longueur Utile + Chute)</th><th style="width: 8%;" class="center-text">Qté</th><th style="width: 8%;" class="center-text">Utile</th><th style="width: 7%;" class="center-text">Chute</th><th style="width: 7%;" class="center-text">% Perte</th></tr></thead><tbody>'
             dict_total_barres_achetees = {}
-            for (serie, ref), coupes in dict_global_coupes.items():
+            for (serie, ref), coupes in sorted(dict_global_coupes.items(), key=lambda x: (x[0][0], x[0][1])):
                 coupes_triees = sorted(coupes, key=lambda x: x["longueur"], reverse=True)
                 barres_brutes = []
                 for c in coupes_triees:
@@ -770,6 +683,41 @@ elif menu_selection == "📐 Fiche Atelier & Débit":
                             b.append(c); place_trouvee = True; break
                     if not place_trouvee: barres_brutes.append([c])
                 dict_total_barres_achetees[(serie, ref)] = len(barres_brutes)
+                grouped_bars = []
+                for b in barres_brutes:
+                    matched = False
+                    for gb in grouped_bars:
+                        if len(b) == len(gb['pieces']):
+                            is_identical = True
+                            for p1, p2 in zip(b, gb['pieces']):
+                                if p1['longueur'] != p2['longueur'] or p1['repere'] != p2['repere']: is_identical = False; break
+                            if is_identical: gb['qty'] += 1; matched = True; break
+                    if not matched: grouped_bars.append({'pieces': b, 'qty': 1})
+                total_barres_pour_ref = 0
+                b_idx = 1
+                for gb in grouped_bars:
+                    barre = gb['pieces']; qte_barre = gb['qty']; total_barres_pour_ref += qte_barre
+                    somme_profils = sum([m["longueur"] for m in barre]); somme_scies = len(barre) * EPAISSEUR_SCIE
+                    total_consomme = somme_profils + somme_scies; chute_restante = max(0, LONGUEUR_BRUTE - total_consomme)
+                    pct_perte = (chute_restante / LONGUEUR_BRUTE) * 100
+                    html_barre_div = '<div class="bar-container">'
+                    for morceau in barre:
+                        moceau_lg = morceau["longueur"]; rep = morceau["repere"]; comp_name = morceau["composant"]
+                        couleur = map_couleurs.get(rep, "#3B82F6")
+                        pct_largeur = ((moceau_lg + EPAISSEUR_SCIE) / LONGUEUR_BRUTE) * 100
+                        html_barre_div += f'<div class="bar-segment" style="width: {pct_largeur}%; background-color: {couleur};" title="{rep} - {comp_name} ({int(moceau_lg)}mm)">{int(moceau_lg)}</div>'
+                    if chute_restante > 0: html_barre_div += f'<div class="bar-chute" style="width: {(chute_restante/LONGUEUR_BRUTE)*100}%;"></div>'
+                    html_barre_div += '</div>'
+                    html_coupes += f'<tr><td class="center-text">{ref} (B{b_idx})</td><td style="padding: 4px;">{html_barre_div}</td><td class="center-text" style="font-weight: bold;">{qte_barre}</td><td class="center-text">{int(total_consomme)}</td><td class="center-text">{int(chute_restante)}</td><td class="center-text">{pct_perte:.1f}%</td></tr>'
+                    b_idx += 1
+                html_coupes += f'<tr style="background-color: #F9FAFB; font-weight: bold; border-bottom: 2px solid #D1D5DB;"><td>TOTAL {ref}</td><td colspan="5">{total_barres_pour_ref} Barre(s) ({serie.upper()}) de {int(LONGUEUR_BRUTE)} mm</td></tr>'
+            html_coupes += "</tbody></table>"
+            st.markdown(html_coupes.replace('\n', ''), unsafe_allow_html=True)
+            
+            st.markdown('<div class="block-spacer"></div>', unsafe_allow_html=True)
+            st.markdown('<div class="excel-head-green">📦 RÉCAPITULATIF DE COMMANDE DES PROFILÉS</div>', unsafe_allow_html=True)
+            html_recap = '<table class="print-table" style="width: 100%;"><thead><tr><th>Série</th><th>Référence Alu</th><th class="center-text">Total Barres (' + str(LONGUEUR_BRUTE/1000) + 'm)</th><th class="center-text">Prix Unitaire Barre (DA)</th><th class="center-text">Total HT (DA)</th></tr></thead><tbody>'
+            
             # --- CALCUL DU DEVIS ALU ---
             st.session_state.total_alu = 0.0
             list_profils_commande = []
@@ -782,6 +730,7 @@ elif menu_selection == "📐 Fiche Atelier & Débit":
                     "Prix Unitaire (DA)": pu_barre, "Total HT (DA)": tot_profil_ht
                 })
                 html_recap += f"<tr><td>{serie}</td><td><b>{ref}</b></td><td class='center-text' style='font-weight: bold;'>{qte_b}</td><td class='center-text'>{pu_barre:,.2f} DA</td><td class='center-text' style='font-weight: bold; color:#047857;'>{tot_profil_ht:,.2f} DA</td></tr>"
+            
             html_recap += f'<tr style="background-color: #D1FAE5; font-weight: bold;"><td colspan="4" style="text-align: right;">TOTAL COMMANDES PROFILÉS :</td><td class="center-text" style="color:#065F46; font-size:16px;">{st.session_state.total_alu:,.2f} DA</td></tr>'
             html_recap += "</tbody></table>"
             st.session_state.list_profils_commande = list_profils_commande
@@ -963,21 +912,17 @@ elif menu_selection == "🛒 Quincaillerie & Joints":
                             })
                             list_accessoires.append({"Série": serie, "Référence": ref_comp, "Désignation": designation, "Quantité": total_qty})
 
-        # --- CALCUL DU DEVIS ACCESSOIRES (avec PU et Total pour Bon de Commande) ---
+        # --- CALCUL DU DEVIS ACCESSOIRES ---
         st.session_state.total_accessoires = 0.0
         for acc in list_accessoires:
             ref = str(acc["Référence"]).strip().upper()
             pu_acc = st.session_state.prix_entreprise.get(ref, 0.0)
-            acc["PU (DA)"] = pu_acc
-            acc["Total HT (DA)"] = round(acc["Quantité"] * pu_acc, 2)
-            st.session_state.total_accessoires += acc["Total HT (DA)"]
-
+            st.session_state.total_accessoires += acc["Quantité"] * pu_acc
+            
         for j in list_joints:
             ref = str(j["Référence"]).strip().upper()
             pu_j = st.session_state.prix_entreprise.get(ref, 0.0)
-            j["PU (DA/m)"] = pu_j
-            j["Total HT (DA)"] = round(j["Quantité Totale (m)"] * pu_j, 2)
-            st.session_state.total_accessoires += j["Total HT (DA)"]
+            st.session_state.total_accessoires += j["Quantité Totale (m)"] * pu_j
         # -----------------------------------
 
         titre_pdf = f"{NOM_PROJET}_Quincaillerie_{DATE_DU_JOUR}".replace(" ", "_").replace("'", "")
@@ -1010,12 +955,10 @@ elif menu_selection == "🛒 Quincaillerie & Joints":
             st.session_state.list_acc_detail = list_accessoires
             df_acc = pd.DataFrame(list_accessoires)
             df_acc["Référence"] = df_acc["Référence"].fillna(""); df_acc["Série"] = df_acc["Série"].fillna("")
-            df_acc_grouped = df_acc.groupby(["Série", "Référence", "Désignation"], dropna=False, as_index=False).agg({"Quantité": "sum", "PU (DA)": "first", "Total HT (DA)": "sum"})
-            html_acc = '<table class="print-table" style="width: 100%;"><thead><tr><th>Gamme / Série</th><th>Référence</th><th>Désignation</th><th class="center-text">Quantité</th><th class="center-text">PU (DA)</th><th class="center-text">Total HT (DA)</th></tr></thead><tbody>'
+            df_acc_grouped = df_acc.groupby(["Série", "Référence", "Désignation"], dropna=False, as_index=False)["Quantité"].sum()
+            html_acc = '<table class="print-table" style="width: 100%;"><thead><tr><th>Gamme / Série</th><th>Référence</th><th>Désignation de l\'Accessoire</th><th class="center-text">Quantité Globale</th></tr></thead><tbody>'
             for idx, a in df_acc_grouped.iterrows():
-                html_acc += f'<tr><td>{a["Série"]}</td><td><b>{a["Référence"]}</b></td><td>{a["Désignation"]}</td><td class="center-text" style="font-weight:bold;">{int(a["Quantité"])} U</td><td class="center-text">{a["PU (DA)"]:,.2f} DA</td><td class="center-text" style="font-weight:bold;color:#047857;">{a["Total HT (DA)"]:,.2f} DA</td></tr>'
-            total_acc_q = df_acc_grouped["Total HT (DA)"].sum()
-            html_acc += f'<tr style="background:#D1FAE5;font-weight:bold;"><td colspan="5" style="text-align:right;">TOTAL ACCESSOIRES :</td><td class="center-text" style="color:#065F46;">{total_acc_q:,.2f} DA</td></tr>'
+                html_acc += f'<tr><td>{a["Série"]}</td><td>{a["Référence"]}</td><td>{a["Désignation"]}</td><td class="center-text" style="font-weight:bold;">{int(a["Quantité"])} U</td></tr>'
             html_acc += '</tbody></table>'
             st.markdown(html_acc.replace('\n', ''), unsafe_allow_html=True)
 
@@ -1025,26 +968,12 @@ elif menu_selection == "🛒 Quincaillerie & Joints":
             st.session_state.list_joints_detail = list_joints
             df_joints = pd.DataFrame(list_joints)
             df_joints["Référence"] = df_joints["Référence"].fillna(""); df_joints["Série"] = df_joints["Série"].fillna("")
-            df_joints_grouped = df_joints.groupby(["Série", "Référence", "Désignation"], dropna=False, as_index=False).agg({"Quantité Totale (m)": "sum", "PU (DA/m)": "first", "Total HT (DA)": "sum"})
-            html_joints = '<table class="print-table" style="width: 100%;"><thead><tr><th>Gamme / Série</th><th>Référence</th><th>Désignation du Joint</th><th class="center-text">Longueur (m)</th><th class="center-text">PU (DA/m)</th><th class="center-text">Total HT (DA)</th></tr></thead><tbody>'
+            df_joints_grouped = df_joints.groupby(["Série", "Référence", "Désignation"], dropna=False, as_index=False)["Quantité Totale (m)"].sum()
+            html_joints = '<table class="print-table" style="width: 100%;"><thead><tr><th>Gamme / Série</th><th>Référence</th><th>Désignation du Joint</th><th class="center-text">Longueur Totale (Mètres)</th></tr></thead><tbody>'
             for idx, j in df_joints_grouped.iterrows():
-                html_joints += f'<tr><td>{j["Série"]}</td><td><b>{j["Référence"]}</b></td><td>{j["Désignation"]}</td><td class="center-text" style="font-weight:bold;">{j["Quantité Totale (m)"]:.2f} m</td><td class="center-text">{j["PU (DA/m)"]:,.2f} DA</td><td class="center-text" style="font-weight:bold;color:#047857;">{j["Total HT (DA)"]:,.2f} DA</td></tr>'
-            total_jnt_q = df_joints_grouped["Total HT (DA)"].sum()
-            html_joints += f'<tr style="background:#DCFCE7;font-weight:bold;"><td colspan="5" style="text-align:right;">TOTAL JOINTS :</td><td class="center-text" style="color:#065F46;">{total_jnt_q:,.2f} DA</td></tr>'
+                html_joints += f'<tr><td>{j["Série"]}</td><td>{j["Référence"]}</td><td>{j["Désignation"]}</td><td class="center-text" style="font-weight:bold;">{j["Quantité Totale (m)"]:.2f} m</td></tr>'
             html_joints += '</tbody></table>'
             st.markdown(html_joints.replace('\n', ''), unsafe_allow_html=True)
-
-        # === BON DE COMMANDE ACCESSOIRES (impression séparée) ===
-        st.markdown('<div class="block-spacer"></div>', unsafe_allow_html=True)
-        st.markdown('<div class="excel-head-green">📦 BON DE COMMANDE GLOBAL — ACCESSOIRES & JOINTS</div>', unsafe_allow_html=True)
-        titre_bc_acc = f"{NOM_PROJET}_BC_Accessoires_{DATE_DU_JOUR}".replace(" ", "_").replace("'", "")
-        components.html(f"""
-            <button onclick="var ot=window.parent.document.title;window.parent.document.title='{titre_bc_acc}';setTimeout(function(){{window.parent.print();}},100);setTimeout(function(){{window.parent.document.title=ot;}},2000);"
-            style="background:#10B981;color:white;padding:8px 18px;border:none;border-radius:5px;cursor:pointer;font-weight:bold;font-size:13px;">
-            🖨️ Imprimer le Bon de Commande Accessoires
-            </button>
-        """, height=52)
-        st.markdown(f'<div style="font-size:13px;color:#6B7280;margin-bottom:4px;">Projet : <b>{NOM_PROJET}</b> — Date : {DATE_DU_JOUR} — Montant Total Accessoires & Joints : <b>{st.session_state.total_accessoires:,.2f} DA</b></div>', unsafe_allow_html=True)
 
 elif menu_selection == "🏠 Volets Roulants":
     st.markdown('<div class="section-header no-print">🏠 Module Volets Roulants & Tarification</div>', unsafe_allow_html=True)
@@ -1570,139 +1499,48 @@ elif menu_selection == "📊 Devis Global du Projet":
     """
     st.markdown(html_devis, unsafe_allow_html=True)
 
-    # 5. Bons de Commande par module
+    # 5. Détail complet des postes par module
     st.markdown('<div class="block-spacer"></div>', unsafe_allow_html=True)
-    st.markdown('<div class="excel-head-blue">📜 BONS DE COMMANDE PAR MODULE</div>', unsafe_allow_html=True)
-    st.caption("Chaque bon de commande peut être imprimé séparément ou utilisez le bouton global en haut.")
+    st.markdown('<div class="excel-head-blue">📜 DÉTAIL DÉTAILLÉ DE CHAQUE POSTE DU DEVIS</div>', unsafe_allow_html=True)
 
-    # ───────────────────────────────────────────────────────────────────
-    # BON DE COMMANDE 1 — PROFILÉS ALUMINIUM
-    # ───────────────────────────────────────────────────────────────────
-    st.markdown("---")
-    st.markdown("### 🔩 1. Bon de Commande — Profilés Aluminium")
-    list_profils = st.session_state.get("list_profils_commande", [])
-    if list_profils:
-        titre_alu = f"BC_ALU_{NOM_PROJET}_{DATE_DU_JOUR}".replace(" ", "_").replace("'", "")
-        components.html(f"""
-            <button onclick="var ot=window.parent.document.title;window.parent.document.title='{titre_alu}';setTimeout(function(){{window.parent.print();}},100);setTimeout(function(){{window.parent.document.title=ot;}},2000);"
-            style="background:#1E40AF;color:white;padding:8px 18px;border:none;border-radius:5px;cursor:pointer;font-weight:bold;font-size:13px;">
-            🖨️ Imprimer — Bon de Commande Profilés Alu
-            </button>
-        """, height=52)
-        st.markdown(f'<div style="font-size:13px;color:#6B7280;margin-bottom:6px;">Projet : <b>{NOM_PROJET}</b> — Date : {DATE_DU_JOUR}</div>', unsafe_allow_html=True)
-        html_bc_alu = '<table class="print-table" style="width:100%;"><thead><tr><th>Série</th><th>Référence Alu</th><th class="center-text">Quantité Barres</th><th class="center-text">Prix Unitaire (DA)</th><th class="center-text">Total HT (DA)</th></tr></thead><tbody>'
-        for p in list_profils:
-            html_bc_alu += f'<tr><td>{p["Série"]}</td><td><b>{p["Référence"]}</b></td><td class="center-text" style="font-weight:bold;">{p["Quantité Barres"]}</td><td class="center-text">{p["Prix Unitaire (DA)"]:,.2f} DA</td><td class="center-text" style="font-weight:bold;color:#047857;">{p["Total HT (DA)"]:,.2f} DA</td></tr>'
-        html_bc_alu += f'<tr style="background:#D1FAE5;font-weight:bold;"><td colspan="4" style="text-align:right;">TOTAL PROFILÉS :</td><td class="center-text" style="color:#065F46;font-size:15px;">{st.session_state.total_alu:,.2f} DA</td></tr>'
-        html_bc_alu += '</tbody></table>'
-        st.markdown(html_bc_alu, unsafe_allow_html=True)
+    st.markdown("### 🪟 1. Détail Menuiserie Aluminium (Châssis)")
+    if not st.session_state.chassis_rows_v27.empty:
+        st.dataframe(st.session_state.chassis_rows_v27, use_container_width=True)
     else:
-        st.info("Aucun calcul de profilés — rendez-vous dans '📐 Fiche Atelier & Débit' puis cliquez sur Générer.")
+        st.info("Aucun châssis enregistré.")
 
-    # ───────────────────────────────────────────────────────────────────
-    # BON DE COMMANDE 2 — VITRAGE
-    # ───────────────────────────────────────────────────────────────────
-    st.markdown("---")
-    st.markdown("### 🪟 2. Bon de Commande — Vitrage & Miroiterie")
-    list_vit = st.session_state.get("list_vitrages_detail", [])
-    if list_vit:
-        titre_vit = f"BC_VITRAGE_{NOM_PROJET}_{DATE_DU_JOUR}".replace(" ", "_").replace("'", "")
-        components.html(f"""
-            <button onclick="var ot=window.parent.document.title;window.parent.document.title='{titre_vit}';setTimeout(function(){{window.parent.print();}},100);setTimeout(function(){{window.parent.document.title=ot;}},2000);"
-            style="background:#0891B2;color:white;padding:8px 18px;border:none;border-radius:5px;cursor:pointer;font-weight:bold;font-size:13px;">
-            🖨️ Imprimer — Bon de Commande Vitrage
-            </button>
-        """, height=52)
-        st.markdown(f'<div style="font-size:13px;color:#6B7280;margin-bottom:6px;">Projet : <b>{NOM_PROJET}</b> — Date : {DATE_DU_JOUR}</div>', unsafe_allow_html=True)
-        html_bc_vit = '<table class="print-table" style="width:100%;"><thead><tr><th>Repère</th><th>Ouvrage</th><th>Désignation</th><th>Type Vitrage</th><th class="center-text">Lg (mm)</th><th class="center-text">Ht (mm)</th><th class="center-text">Qté</th><th class="center-text">Surf. (m²)</th><th class="center-text">Prix Total (DA)</th></tr></thead><tbody>'
-        for v in list_vit:
-            prix_v = v.get("Prix Total (DA)", 0.0)
-            surf = v.get("Surf. Totale (m²)", 0.0)
-            html_bc_vit += f'<tr><td><b>{v["Repère"]}</b></td><td>{v["Ouvrage"]}</td><td>{v["Désignation"]}</td><td>{v["Type Vitrage"]}</td><td class="center-text">{v["Largeur (mm)"]}</td><td class="center-text">{v["Hauteur (mm)"]}</td><td class="center-text" style="font-weight:bold;">{v["Qté"]}</td><td class="center-text">{surf:.2f}</td><td class="center-text" style="font-weight:bold;color:#047857;">{prix_v:,.2f} DA</td></tr>'
-        html_bc_vit += f'<tr style="background:#DBEAFE;font-weight:bold;"><td colspan="8" style="text-align:right;">TOTAL VITRAGE :</td><td class="center-text" style="color:#1E3A8A;font-size:15px;">{st.session_state.total_vitrage:,.2f} DA</td></tr>'
-        html_bc_vit += '</tbody></table>'
-        st.markdown(html_bc_vit, unsafe_allow_html=True)
+    st.markdown("### 💎 2. Détail Vitrage & Miroiterie")
+    list_vit_det = st.session_state.get("list_vitrages_detail", [])
+    if list_vit_det:
+        st.dataframe(pd.DataFrame(list_vit_det), use_container_width=True)
     else:
-        st.info("Aucun calcul de vitrage — rendez-vous dans '🪟 Carnet de Vitrage'.")
+        st.info("Aucun calcul de vitrage n'a été effectué pour le moment (rendez-vous dans le module 'Carnet de Vitrage').")
 
-    # ───────────────────────────────────────────────────────────────────
-    # BON DE COMMANDE 3 — ACCESSOIRES & JOINTS
-    # ───────────────────────────────────────────────────────────────────
-    st.markdown("---")
-    st.markdown("### 🛒 3. Bon de Commande — Quincaillerie, Accessoires & Joints")
+    st.markdown("### 🛒 3. Détail Quincaillerie, Accessoires & Joints")
     list_acc_det = st.session_state.get("list_acc_detail", [])
     list_jnt_det = st.session_state.get("list_joints_detail", [])
-    if list_acc_det or list_jnt_det:
-        titre_acc = f"BC_ACCESS_{NOM_PROJET}_{DATE_DU_JOUR}".replace(" ", "_").replace("'", "")
-        components.html(f"""
-            <button onclick="var ot=window.parent.document.title;window.parent.document.title='{titre_acc}';setTimeout(function(){{window.parent.print();}},100);setTimeout(function(){{window.parent.document.title=ot;}},2000);"
-            style="background:#7C3AED;color:white;padding:8px 18px;border:none;border-radius:5px;cursor:pointer;font-weight:bold;font-size:13px;">
-            🖨️ Imprimer — Bon de Commande Accessoires
-            </button>
-        """, height=52)
-        st.markdown(f'<div style="font-size:13px;color:#6B7280;margin-bottom:6px;">Projet : <b>{NOM_PROJET}</b> — Date : {DATE_DU_JOUR}</div>', unsafe_allow_html=True)
-        if list_acc_det:
-            bc_acc_dict = {}
-            for acc in list_acc_det:
-                ref_a = str(acc.get("Référence", "-"))
-                if ref_a not in bc_acc_dict:
-                    bc_acc_dict[ref_a] = {"Série": acc.get("Série", ""), "Référence": ref_a, "Désignation": acc.get("Désignation", ""), "Quantité": 0, "PU (DA)": acc.get("PU (DA)", 0.0), "Total HT (DA)": 0.0}
-                bc_acc_dict[ref_a]["Quantité"] += acc.get("Quantité", 0)
-                bc_acc_dict[ref_a]["Total HT (DA)"] += acc.get("Total HT (DA)", 0.0)
-            total_acc_bc = sum(v["Total HT (DA)"] for v in bc_acc_dict.values())
-            html_bc_acc = '<table class="print-table" style="width:100%;"><thead><tr><th>Série</th><th>Référence</th><th>Désignation</th><th class="center-text">Quantité</th><th class="center-text">PU (DA)</th><th class="center-text">Total HT (DA)</th></tr></thead><tbody>'
-            for ref_a, a_data in bc_acc_dict.items():
-                html_bc_acc += f'<tr><td>{a_data["Série"]}</td><td><b>{ref_a}</b></td><td>{a_data["Désignation"]}</td><td class="center-text" style="font-weight:bold;">{int(a_data["Quantité"])} U</td><td class="center-text">{a_data["PU (DA)"]:,.2f} DA</td><td class="center-text" style="font-weight:bold;color:#7C3AED;">{a_data["Total HT (DA)"]:,.2f} DA</td></tr>'
-            html_bc_acc += f'<tr style="background:#EDE9FE;font-weight:bold;"><td colspan="5" style="text-align:right;">TOTAL ACCESSOIRES :</td><td class="center-text" style="color:#4C1D95;font-size:14px;">{total_acc_bc:,.2f} DA</td></tr>'
-            html_bc_acc += '</tbody></table>'
-            st.markdown(html_bc_acc, unsafe_allow_html=True)
-        if list_jnt_det:
-            bc_jnt_dict = {}
-            for j in list_jnt_det:
-                ref_j = str(j.get("Référence", "-"))
-                if ref_j not in bc_jnt_dict:
-                    bc_jnt_dict[ref_j] = {"Série": j.get("Série", ""), "Référence": ref_j, "Désignation": j.get("Désignation", ""), "Quantité (m)": 0.0, "PU (DA/m)": j.get("PU (DA/m)", 0.0), "Total HT (DA)": 0.0}
-                bc_jnt_dict[ref_j]["Quantité (m)"] += j.get("Quantité Totale (m)", 0.0)
-                bc_jnt_dict[ref_j]["Total HT (DA)"] += j.get("Total HT (DA)", 0.0)
-            total_jnt_bc = sum(v["Total HT (DA)"] for v in bc_jnt_dict.values())
-            html_bc_jnt = '<table class="print-table" style="width:100%;margin-top:16px;"><thead><tr><th>Série</th><th>Référence</th><th>Désignation Joint</th><th class="center-text">Quantité (m)</th><th class="center-text">PU (DA/m)</th><th class="center-text">Total HT (DA)</th></tr></thead><tbody>'
-            for ref_j, j_data in bc_jnt_dict.items():
-                html_bc_jnt += f'<tr><td>{j_data["Série"]}</td><td><b>{ref_j}</b></td><td>{j_data["Désignation"]}</td><td class="center-text" style="font-weight:bold;">{j_data["Quantité (m)"]:.2f} m</td><td class="center-text">{j_data["PU (DA/m)"]:,.2f} DA</td><td class="center-text" style="font-weight:bold;color:#047857;">{j_data["Total HT (DA)"]:,.2f} DA</td></tr>'
-            html_bc_jnt += f'<tr style="background:#DCFCE7;font-weight:bold;"><td colspan="5" style="text-align:right;">TOTAL JOINTS :</td><td class="center-text" style="color:#065F46;font-size:14px;">{total_jnt_bc:,.2f} DA</td></tr>'
-            html_bc_jnt += '</tbody></table>'
-            st.markdown(html_bc_jnt, unsafe_allow_html=True)
-    else:
-        st.info("Aucun calcul d'accessoires — rendez-vous dans '🛒 Quincaillerie & Joints'.")
+    if list_acc_det:
+        st.markdown("#### Accessoires :")
+        st.dataframe(pd.DataFrame(list_acc_det), use_container_width=True)
+    if list_jnt_det:
+        st.markdown("#### Joints & Brosse :")
+        st.dataframe(pd.DataFrame(list_jnt_det), use_container_width=True)
+    if not list_acc_det and not list_jnt_det:
+        st.info("Aucun calcul d'accessoires n'a été effectué (rendez-vous dans 'Quincaillerie & Joints').")
 
-    # ───────────────────────────────────────────────────────────────────
-    # BON DE COMMANDE 4 — VOLETS ROULANTS
-    # ───────────────────────────────────────────────────────────────────
-    st.markdown("---")
-    st.markdown("### 🏠 4. Bon de Commande — Volets Roulants")
+    st.markdown("### 🏠 4. Détail Volets Roulants")
+    list_vol_det = st.session_state.get("list_volets_detail", [])
     list_vol_fin = st.session_state.get("list_volets_financier", [])
+    if list_vol_det:
+        st.markdown("#### Détail des Tabliers :")
+        st.dataframe(pd.DataFrame(list_vol_det), use_container_width=True)
     if list_vol_fin:
-        titre_vol = f"BC_VOLETS_{NOM_PROJET}_{DATE_DU_JOUR}".replace(" ", "_").replace("'", "")
-        components.html(f"""
-            <button onclick="var ot=window.parent.document.title;window.parent.document.title='{titre_vol}';setTimeout(function(){{window.parent.print();}},100);setTimeout(function(){{window.parent.document.title=ot;}},2000);"
-            style="background:#D97706;color:white;padding:8px 18px;border:none;border-radius:5px;cursor:pointer;font-weight:bold;font-size:13px;">
-            🖨️ Imprimer — Bon de Commande Volets Roulants
-            </button>
-        """, height=52)
-        st.markdown(f'<div style="font-size:13px;color:#6B7280;margin-bottom:6px;">Projet : <b>{NOM_PROJET}</b> — Date : {DATE_DU_JOUR}</div>', unsafe_allow_html=True)
-        html_bc_vol = '<table class="print-table" style="width:100%;"><thead><tr><th>Repère</th><th>Type Lame</th><th class="center-text">Coût Lames (DA)</th><th class="center-text">Coût Moteur (DA)</th><th class="center-text">Coût Acc. (DA)</th><th class="center-text">TOTAL (DA)</th></tr></thead><tbody>'
-        for v in list_vol_fin:
-            html_bc_vol += f'<tr><td><b>{v["Repère"]}</b></td><td>{v["Type Lame"]}</td><td class="center-text">{v["Coût Lames (DA)"]:,.2f}</td><td class="center-text">{v["Coût Moteur (DA)"]:,.2f}</td><td class="center-text">{v["Coût Accessoires (DA)"]:,.2f}</td><td class="center-text" style="font-weight:bold;color:#D97706;">{v["TOTAL (DA)"]:,.2f} DA</td></tr>'
-        html_bc_vol += f'<tr style="background:#FEF3C7;font-weight:bold;"><td colspan="5" style="text-align:right;">TOTAL VOLETS ROULANTS :</td><td class="center-text" style="color:#92400E;font-size:15px;">{st.session_state.total_volets:,.2f} DA</td></tr>'
-        html_bc_vol += '</tbody></table>'
-        st.markdown(html_bc_vol, unsafe_allow_html=True)
-    else:
-        st.info("Aucun calcul de volets — rendez-vous dans '🏠 Volets Roulants'.")
+        st.markdown("#### Sous-détail Financier Volets :")
+        st.dataframe(pd.DataFrame(list_vol_fin), use_container_width=True)
+    if not list_vol_det and not list_vol_fin:
+        st.info("Aucun calcul de volet n'a été effectué (rendez-vous dans 'Volets Roulants').")
 
-    # ───────────────────────────────────────────────────────────────────
-    # BON DE COMMANDE 5 — GARDE-CORPS
-    # ───────────────────────────────────────────────────────────────────
-    st.markdown("---")
-    st.markdown("### 🚧 5. Garde-corps")
+    st.markdown("### 🚧 5. Détail Garde-corps")
     if not st.session_state.df_garde_corps.empty:
         st.dataframe(st.session_state.df_garde_corps, use_container_width=True)
     else:
