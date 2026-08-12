@@ -115,7 +115,7 @@ def fetch_entreprise_info(ent_id):
 
 def fetch_project_list():
     try:
-        response = supabase.table("projets").select("id, nom_projet").eq("entreprise_id", st.session_state.entreprise_id).execute()
+        response = supabase.table("projets").select("id, nom_projet, created_at").eq("entreprise_id", st.session_state.entreprise_id).execute()
         return response.data  
     except:
         return []
@@ -385,11 +385,13 @@ if st.sidebar.button("Créer ce projet", use_container_width=True):
         except: pass
 st.sidebar.markdown("---")
 
+# --- Sélection & Actions sur les projets ---
 projet_options = {p["nom_projet"]: p["id"] for p in projets_existants}
 projet_selectionne = st.sidebar.selectbox("📂 Projets existants :", ["-- Sélectionner --"] + list(projet_options.keys()))
 
-if st.sidebar.button("Charger ce projet", use_container_width=True):
-    if projet_selectionne != "-- Sélectionner --":
+c_ch, c_del = st.sidebar.columns([3, 2])
+with c_ch:
+    if st.button("📂 Charger", use_container_width=True, disabled=(projet_selectionne == "-- Sélectionner --")):
         target_id = projet_options[projet_selectionne]
         try:
             response = supabase.table("projets").select("donnees").eq("id", target_id).eq("entreprise_id", st.session_state.entreprise_id).execute()
@@ -411,6 +413,78 @@ if st.sidebar.button("Charger ce projet", use_container_width=True):
                 st.rerun()
         except Exception as e: 
             st.sidebar.error(f"Erreur de chargement: {e}")
+
+with c_del:
+    if st.button("🗑️ Supprimer", use_container_width=True, disabled=(projet_selectionne == "-- Sélectionner --")):
+        st.session_state["confirm_delete_project_id"] = projet_options[projet_selectionne]
+        st.session_state["confirm_delete_project_name"] = projet_selectionne
+
+# --- Dialogue de confirmation de suppression ---
+if st.session_state.get("confirm_delete_project_id"):
+    p_id = st.session_state.confirm_delete_project_id
+    p_name = st.session_state.confirm_delete_project_name
+    st.sidebar.warning(f"⚠️ Supprimer le projet **{p_name}** ?")
+    col_yes, col_no = st.sidebar.columns(2)
+    if col_yes.button("Oui, Supprimer", type="primary", use_container_width=True):
+        try:
+            supabase.table("projets").delete().eq("id", p_id).eq("entreprise_id", st.session_state.entreprise_id).execute()
+            if st.session_state.current_project_id == p_id:
+                st.session_state.current_project_id = None
+                st.session_state.current_project_name = "Nouveau Projet (Non Sauvegardé)"
+                st.session_state.chassis_rows_v27 = get_default_df()
+            st.session_state.confirm_delete_project_id = None
+            st.session_state.confirm_delete_project_name = None
+            st.session_state.liste_projets_sauvegardes = fetch_project_list()
+            st.sidebar.success(f"Projet '{p_name}' supprimé !")
+            st.rerun()
+        except Exception as e:
+            st.sidebar.error(f"Erreur de suppression: {e}")
+    if col_no.button("Annuler", use_container_width=True):
+        st.session_state.confirm_delete_project_id = None
+        st.session_state.confirm_delete_project_name = None
+        st.rerun()
+
+st.sidebar.markdown("---")
+
+# --- TABLEAU DES PROJETS DANS LE MENU LATÉRAL ---
+with st.sidebar.expander("📋 Tableau des Projets", expanded=False):
+    if projets_existants:
+        for p in projets_existants:
+            p_id = p["id"]
+            p_nom = p["nom_projet"]
+            is_active = (st.session_state.current_project_id == p_id)
+            prefix = "⭐ " if is_active else "📄 "
+            
+            c_txt, c_act1, c_act2 = st.columns([3, 1, 1])
+            c_txt.markdown(f"{prefix}**{p_nom}**")
+            if c_act1.button("📂", key=f"tbl_load_{p_id}", help=f"Charger {p_nom}"):
+                try:
+                    response = supabase.table("projets").select("donnees").eq("id", p_id).eq("entreprise_id", st.session_state.entreprise_id).execute()
+                    if response.data:
+                        raw_data = response.data[0]["donnees"]
+                        if isinstance(raw_data, dict) and "chassis" in raw_data:
+                            df_charge = pd.DataFrame(raw_data["chassis"])
+                            df_gc_charge = pd.DataFrame(raw_data.get("garde_corps", []))
+                            if not df_gc_charge.empty:
+                                st.session_state.df_garde_corps = df_gc_charge
+                        else:
+                            df_charge = pd.DataFrame(raw_data)
+                        
+                        df_charge = sanitize_chassis_df(df_charge)
+                        st.session_state.chassis_rows_v27 = df_charge
+                        st.session_state.current_project_name = p_nom
+                        st.session_state.current_project_id = p_id
+                        st.rerun()
+                except Exception as e:
+                    st.sidebar.error(f"Erreur: {e}")
+
+            if c_act2.button("🗑️", key=f"tbl_del_{p_id}", help=f"Supprimer {p_nom}"):
+                st.session_state["confirm_delete_project_id"] = p_id
+                st.session_state["confirm_delete_project_name"] = p_nom
+                st.rerun()
+    else:
+        st.caption("Aucun projet enregistré.")
+
 st.sidebar.markdown("---")
 
 st.sidebar.info(f"Projet actif : **{st.session_state.current_project_name}**")
