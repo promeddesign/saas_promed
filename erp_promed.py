@@ -768,83 +768,83 @@ elif menu_selection == "📐 Fiche Atelier & Débit":
 
             from itertools import groupby
 
-st.markdown('<div class="block-spacer"></div>', unsafe_allow_html=True)
-st.markdown('<div class="excel-head-blue">✂️ OPTIMISATION ET PARCELLES COLORÉES DE COUPE</div>', unsafe_allow_html=True)
+            st.markdown('<div class="block-spacer"></div>', unsafe_allow_html=True)
+            st.markdown('<div class="excel-head-blue">✂️ OPTIMISATION ET PARCELLES COLORÉES DE COUPE</div>', unsafe_allow_html=True)
 
-dict_total_barres_achetees = {}
+            dict_total_barres_achetees = {}
 
-# 1. On trie le dictionnaire par Gamme, puis Série, puis Réf
-items_tries = sorted(dict_global_coupes.items(), key=lambda x: (x[0][0], x[0][1], x[0][2]))
+            # 1. On trie le dictionnaire par Gamme, puis Série, puis Réf
+            items_tries = sorted(dict_global_coupes.items(), key=lambda x: (x[0][0], x[0][1], x[0][2]))
 
-# 2. On groupe par (Gamme, Série) - qui sont les indices 0 et 1 de la clé
-groupes_gamme_serie = groupby(items_tries, key=lambda x: (x[0][0], x[0][1]))
+            # 2. On groupe par (Gamme, Série) - qui sont les indices 0 et 1 de la clé
+            groupes_gamme_serie = groupby(items_tries, key=lambda x: (x[0][0], x[0][1]))
 
-# 3. Boucle principale : Un tableau par Gamme/Série
-for (gamme, serie), elements_groupe in groupes_gamme_serie:
-    
-    # --- Titre dynamique pour chaque groupe ---
-    st.markdown(f"### 🏷️ Gamme : {gamme} | Série : {serie}")
-    
-    # --- Début du tableau spécifique à ce groupe ---
-    html_coupes = '<table class="print-table" style="width: 100%; margin-bottom: 20px;"><thead><tr><th style="width: 12%;">Référence</th><th style="width: 58%;">Plan Visualisé (Longueur Utile + Chute)</th><th style="width: 8%;" class="center-text">Qté</th><th style="width: 7%;" class="center-text">Utile</th><th style="width: 7%;" class="center-text">Chute</th><th style="width: 8%;" class="center-text">% Perte</th></tr></thead><tbody>'
+            # 3. Boucle principale : Un tableau par Gamme/Série
+            for (gamme, serie), elements_groupe in groupes_gamme_serie:
+                
+                # --- Titre dynamique pour chaque groupe ---
+                st.markdown(f"### 🏷️ Gamme : {gamme} | Série : {serie}")
+                
+                # --- Début du tableau spécifique à ce groupe ---
+                html_coupes = '<table class="print-table" style="width: 100%; margin-bottom: 20px;"><thead><tr><th style="width: 12%;">Référence</th><th style="width: 58%;">Plan Visualisé (Longueur Utile + Chute)</th><th style="width: 8%;" class="center-text">Qté</th><th style="width: 7%;" class="center-text">Utile</th><th style="width: 7%;" class="center-text">Chute</th><th style="width: 8%;" class="center-text">% Perte</th></tr></thead><tbody>'
 
-    # Boucle sur les références de ce groupe
-    for cle, coupes in elements_groupe:
-        ref = cle[2] # La référence est le 3ème élément du tuple (Gamme, Série, Réf)
-        
-        # --- VOTRE LOGIQUE D'OPTIMISATION EXISTANTE (Inchangée) ---
-        coupes_triees = sorted(coupes, key=lambda x: x["longueur"], reverse=True)
-        barres_brutes = []
-        for c in coupes_triees:
-            place_trouvee = False
-            for b in barres_brutes:
-                espace_occupe = sum([m["longueur"] for m in b]) + (len(b) * EPAISSEUR_SCIE)
-                if (c["longueur"] + EPAISSEUR_SCIE) <= (LONGUEUR_BRUTE - espace_occupe):
-                    b.append(c); place_trouvee = True; break
-            if not place_trouvee: barres_brutes.append([c])
-            
-        dict_total_barres_achetees[(serie, ref)] = len(barres_brutes) 
-        grouped_bars = []
-        
-        for b in barres_brutes:
-            matched = False
-            for gb in grouped_bars:
-                if len(b) == len(gb['pieces']):
-                    is_identical = True
-                    for p1, p2 in zip(b, gb['pieces']):
-                        if p1['longueur'] != p2['longueur'] or p1['repere'] != p2['repere']: is_identical = False; break
-                    if is_identical: gb['qty'] += 1; matched = True; break
-            if not matched: grouped_bars.append({'pieces': b, 'qty': 1})
-        
-        total_barres_pour_ref = 0
-        b_idx = 1
-        
-        # --- VOTRE LOGIQUE D'AFFICHAGE DES BARRES (Inchangée) ---
-        for gb in grouped_bars:
-            barre = gb['pieces']; qte_barre = gb['qty']; total_barres_pour_ref += qte_barre
-            somme_profils = sum([m["longueur"] for m in barre]); somme_scies = len(barre) * EPAISSEUR_SCIE
-            total_consomme = somme_profils + somme_scies; chute_restante = max(0, LONGUEUR_BRUTE - total_consomme)
-            pct_perte = (chute_restante / LONGUEUR_BRUTE) * 100
-            html_barre_div = '<div class="bar-container">'
-            
-            for morceau in barre:
-                moceau_lg = morceau["longueur"]; rep = morceau["repere"]; comp_name = morceau["composant"]
-                couleur = map_couleurs.get(rep, "#3B82F6")
-                pct_largeur = ((moceau_lg + EPAISSEUR_SCIE) / LONGUEUR_BRUTE) * 100
-                html_barre_div += f'<div class="bar-segment" style="width: {pct_largeur}%; background-color: {couleur};" title="{rep} - {comp_name} ({int(moceau_lg)}mm)">{int(moceau_lg)}</div>'
-            
-            if chute_restante > 0: html_barre_div += f'<div class="bar-chute" style="width: {(chute_restante/LONGUEUR_BRUTE)*100}%;"></div>'
-            html_barre_div += '</div>'
-            
-            html_coupes += f'<tr><td class="center-text">{ref} (B{b_idx})</td><td style="padding: 4px;">{html_barre_div}</td><td class="center-text" style="font-weight: bold;">{qte_barre}</td><td class="center-text">{int(total_consomme)}</td><td class="center-text">{int(chute_restante)}</td><td class="center-text">{pct_perte:.1f}%</td></tr>'
-            b_idx += 1
-            
-        html_coupes += f'<tr style="background-color: #F9FAFB; font-weight: bold; border-bottom: 2px solid #D1D5DB;"><td>TOTAL {ref}</td><td colspan="5">{total_barres_pour_ref} Barre(s) ({serie.upper()}) de {int(LONGUEUR_BRUTE)} mm</td></tr>'
-        
-    # --- Fermeture et affichage du tableau uniquement pour cette Gamme/Série ---
-    html_coupes += '</tbody></table>'
-    st.markdown(html_coupes.replace('\n', ''), unsafe_allow_html=True)
-            
+                # Boucle sur les références de ce groupe
+                for cle, coupes in elements_groupe:
+                    ref = cle[2] # La référence est le 3ème élément du tuple (Gamme, Série, Réf)
+                    
+                    # --- VOTRE LOGIQUE D'OPTIMISATION EXISTANTE (Inchangée) ---
+                    coupes_triees = sorted(coupes, key=lambda x: x["longueur"], reverse=True)
+                    barres_brutes = []
+                    for c in coupes_triees:
+                        place_trouvee = False
+                        for b in barres_brutes:
+                            espace_occupe = sum([m["longueur"] for m in b]) + (len(b) * EPAISSEUR_SCIE)
+                            if (c["longueur"] + EPAISSEUR_SCIE) <= (LONGUEUR_BRUTE - espace_occupe):
+                                b.append(c); place_trouvee = True; break
+                        if not place_trouvee: barres_brutes.append([c])
+                        
+                    dict_total_barres_achetees[(serie, ref)] = len(barres_brutes) 
+                    grouped_bars = []
+                    
+                    for b in barres_brutes:
+                        matched = False
+                        for gb in grouped_bars:
+                            if len(b) == len(gb['pieces']):
+                                is_identical = True
+                                for p1, p2 in zip(b, gb['pieces']):
+                                    if p1['longueur'] != p2['longueur'] or p1['repere'] != p2['repere']: is_identical = False; break
+                                if is_identical: gb['qty'] += 1; matched = True; break
+                        if not matched: grouped_bars.append({'pieces': b, 'qty': 1})
+                    
+                    total_barres_pour_ref = 0
+                    b_idx = 1
+                    
+                    # --- VOTRE LOGIQUE D'AFFICHAGE DES BARRES (Inchangée) ---
+                    for gb in grouped_bars:
+                        barre = gb['pieces']; qte_barre = gb['qty']; total_barres_pour_ref += qte_barre
+                        somme_profils = sum([m["longueur"] for m in barre]); somme_scies = len(barre) * EPAISSEUR_SCIE
+                        total_consomme = somme_profils + somme_scies; chute_restante = max(0, LONGUEUR_BRUTE - total_consomme)
+                        pct_perte = (chute_restante / LONGUEUR_BRUTE) * 100
+                        html_barre_div = '<div class="bar-container">'
+                        
+                        for morceau in barre:
+                            moceau_lg = morceau["longueur"]; rep = morceau["repere"]; comp_name = morceau["composant"]
+                            couleur = map_couleurs.get(rep, "#3B82F6")
+                            pct_largeur = ((moceau_lg + EPAISSEUR_SCIE) / LONGUEUR_BRUTE) * 100
+                            html_barre_div += f'<div class="bar-segment" style="width: {pct_largeur}%; background-color: {couleur};" title="{rep} - {comp_name} ({int(moceau_lg)}mm)">{int(moceau_lg)}</div>'
+                        
+                        if chute_restante > 0: html_barre_div += f'<div class="bar-chute" style="width: {(chute_restante/LONGUEUR_BRUTE)*100}%;"></div>'
+                        html_barre_div += '</div>'
+                        
+                        html_coupes += f'<tr><td class="center-text">{ref} (B{b_idx})</td><td style="padding: 4px;">{html_barre_div}</td><td class="center-text" style="font-weight: bold;">{qte_barre}</td><td class="center-text">{int(total_consomme)}</td><td class="center-text">{int(chute_restante)}</td><td class="center-text">{pct_perte:.1f}%</td></tr>'
+                        b_idx += 1
+                        
+                    html_coupes += f'<tr style="background-color: #F9FAFB; font-weight: bold; border-bottom: 2px solid #D1D5DB;"><td>TOTAL {ref}</td><td colspan="5">{total_barres_pour_ref} Barre(s) ({serie.upper()}) de {int(LONGUEUR_BRUTE)} mm</td></tr>'
+                    
+                # --- Fermeture et affichage du tableau uniquement pour cette Gamme/Série ---
+                html_coupes += '</tbody></table>'
+                st.markdown(html_coupes.replace('\n', ''), unsafe_allow_html=True)
+
             st.markdown('<div class="block-spacer"></div>', unsafe_allow_html=True)
             st.markdown('<div class="excel-head-green">📦 RÉCAPITULATIF DE COMMANDE DES PROFILÉS</div>', unsafe_allow_html=True)
             html_recap = '<table class="print-table" style="width: 100%;"><thead><tr><th>Série</th><th>Référence Alu</th><th class="center-text">Total Barres (' + str(LONGUEUR_BRUTE/1000) + 'm)</th><th class="center-text">Prix Unitaire Barre (DA)</th><th class="center-text">Total HT (DA)</th></tr></thead><tbody>'
@@ -866,6 +866,7 @@ for (gamme, serie), elements_groupe in groupes_gamme_serie:
             html_recap += "</tbody></table>"
             st.session_state.list_profils_commande = list_profils_commande
             st.markdown(html_recap.replace('\n', ''), unsafe_allow_html=True)
+            
         else:
             st.error("⚠️ Aucun profilé de type 'Barre' trouvé pour cet ouvrage.")
 
