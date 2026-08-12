@@ -235,6 +235,11 @@ for key in ["total_alu", "total_vitrage", "total_accessoires", "total_volets", "
     if key not in st.session_state:
         st.session_state[key] = 0.0
 
+if "devis_mo" not in st.session_state: st.session_state.devis_mo = 0.0
+if "devis_frais_desc" not in st.session_state: st.session_state.devis_frais_desc = ""
+if "devis_frais_cout" not in st.session_state: st.session_state.devis_frais_cout = 0.0
+if "devis_tva" not in st.session_state: st.session_state.devis_tva = 19.0
+
 # ==========================================
 # 4. GESTION DE L'AUTHENTIFICATION
 # ==========================================
@@ -1405,23 +1410,25 @@ elif menu_selection == "📊 Devis Global du Projet":
     
     # 1. Champs de saisie pour les frais annexes avec bouton de réinitialisation/suppression
     st.markdown("### ⚙️ Frais Annexes & Taxes")
+
+    def reset_frais_callback():
+        st.session_state.devis_mo = 0.0
+        st.session_state.devis_frais_desc = ""
+        st.session_state.devis_frais_cout = 0.0
+
     col_mo, col_frais_desc, col_frais_cout, col_tva, col_reset = st.columns([2, 2, 2, 1, 1.2])
     with col_mo:
-        main_oeuvre = st.number_input("Main d'Œuvre (DA)", min_value=0.0, value=st.session_state.get("devis_mo", 0.0), step=1000.0, key="devis_mo")
+        main_oeuvre = st.number_input("Main d'Œuvre (DA)", min_value=0.0, step=1000.0, key="devis_mo")
     with col_frais_desc:
-        frais_desc = st.text_input("Désignation Frais Sup.", placeholder="Ex: Transport, Grue...", value=st.session_state.get("devis_frais_desc", ""), key="devis_frais_desc")
+        frais_desc = st.text_input("Désignation Frais Sup.", placeholder="Ex: Transport, Grue...", key="devis_frais_desc")
     with col_frais_cout:
-        frais_cout = st.number_input("Coût Frais Sup. (DA)", min_value=0.0, value=st.session_state.get("devis_frais_cout", 0.0), step=500.0, key="devis_frais_cout")
+        frais_cout = st.number_input("Coût Frais Sup. (DA)", min_value=0.0, step=500.0, key="devis_frais_cout")
     with col_tva:
-        tva_pct = st.number_input("TVA (%)", min_value=0.0, value=st.session_state.get("devis_tva", 19.0), step=1.0, key="devis_tva")
+        tva_pct = st.number_input("TVA (%)", min_value=0.0, step=1.0, key="devis_tva")
     with col_reset:
         st.write("")
         st.write("")
-        if st.button("🗑️ Effacer Frais", use_container_width=True, help="Réinitialiser la main d'œuvre et les frais annexes à 0"):
-            st.session_state.devis_mo = 0.0
-            st.session_state.devis_frais_desc = ""
-            st.session_state.devis_frais_cout = 0.0
-            st.rerun()
+        st.button("🗑️ Effacer Frais", on_click=reset_frais_callback, use_container_width=True, help="Réinitialiser la main d'œuvre et les frais annexes à 0")
 
     st.markdown("---")
     
