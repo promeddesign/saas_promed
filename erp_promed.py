@@ -915,6 +915,20 @@ elif menu_selection == "🪟 Carnet de Vitrage":
                         "Surf. U. (m²)": round(surf_u, 2), "Surf. Totale (m²)": round(surf_tot, 2)
                     })
 
+        # --- BOUTON D'IMPRESSION ---
+        titre_pdf_vitrage = f"{NOM_PROJET}_Vitrage_{DATE_DU_JOUR}".replace(" ", "_").replace("'", "")
+        components.html(f"""
+            <button onclick="
+                var oldTitle = window.parent.document.title; 
+                window.parent.document.title = '{titre_pdf_vitrage}'; 
+                setTimeout(function(){{ window.parent.print(); }}, 100);
+                setTimeout(function(){{ window.parent.document.title = oldTitle; }}, 2000);
+            " style="background-color: #2563EB; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 14px; width: 100%;">
+            🖨️ IMPRIMER LE CARNET DE VITRAGE (Enregistrer en PDF)
+            </button>
+        """, height=60)
+
+        # --- TITRES EXISTANTS ---
         st.markdown(f'<div class="projet-title">PROJET : {NOM_PROJET}</div>', unsafe_allow_html=True)
         st.markdown('<div class="excel-head-blue">🪟 CARNET DE VITRAGE (COMMANDE MIROITIER & PRIX)</div>', unsafe_allow_html=True)
         
