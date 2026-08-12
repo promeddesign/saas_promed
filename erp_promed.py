@@ -16,7 +16,6 @@ try:
     SUPABASE_URL = st.secrets["supabase"]["url"]
     SUPABASE_KEY = st.secrets["supabase"]["anon_key"]
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-    st.sidebar.success("🟢 Connecté à Supabase !")
 except Exception as e:
     st.sidebar.error("🔴 Erreur de configuration Supabase. Vérifiez les secrets.")
 
