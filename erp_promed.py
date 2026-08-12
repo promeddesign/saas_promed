@@ -1499,49 +1499,202 @@ elif menu_selection == "📊 Devis Global du Projet":
     """
     st.markdown(html_devis, unsafe_allow_html=True)
 
-    # 5. Détail complet des postes par module
+    # 5. Détail complet des postes avec Prix & Impression par section
     st.markdown('<div class="block-spacer"></div>', unsafe_allow_html=True)
-    st.markdown('<div class="excel-head-blue">📜 DÉTAIL DÉTAILLÉ DE CHAQUE POSTE DU DEVIS</div>', unsafe_allow_html=True)
+    st.markdown('<div class="excel-head-blue">📜 DÉTAIL MATIÈRE AVEC PRIX ET IMPRESSION PAR POSTE D\'OUVRAGE</div>', unsafe_allow_html=True)
 
-    st.markdown("### 🪟 1. Détail Menuiserie Aluminium (Châssis)")
-    if not st.session_state.chassis_rows_v27.empty:
+    # -------------------------------------------------------------
+    # 1. DÉTAIL MENUISERIE ALUMINIUM (PROFILÉS)
+    # -------------------------------------------------------------
+    st.markdown('<div style="page-break-before: always; margin-top: 30px;"></div>', unsafe_allow_html=True)
+    st.markdown("### 🪟 1. Détail Menuiserie Aluminium & Profilés")
+    
+    titre_pdf_alu = f"Devis_Detail_Aluminium_{NOM_PROJET}_{DATE_DU_JOUR}".replace(" ", "_").replace("'", "")
+    components.html(f"""
+        <button onclick="
+            var oldTitle = window.parent.document.title; 
+            window.parent.document.title = '{titre_pdf_alu}'; 
+            setTimeout(function(){{ window.parent.print(); }}, 100);
+            setTimeout(function(){{ window.parent.document.title = oldTitle; }}, 2000);
+        " style="background-color: #1E3A8A; color: white; padding: 10px 18px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 14px; width: 100%; margin-bottom: 10px;">
+        🖨️ IMPRIMER CE DÉTAIL : DEVIS PROFILÉS ALUMINIUM (PDF)
+        </button>
+    """, height=55)
+
+    list_prof_det = st.session_state.get("list_profils_commande", [])
+    if list_prof_det:
+        html_prof_det = '<table class="print-table" style="width: 100%;"><thead><tr><th>Série</th><th>Référence Profilé</th><th class="center-text">Barres (6m)</th><th class="center-text">Prix Unitaire Barre (DA)</th><th class="center-text">Total HT (DA)</th></tr></thead><tbody>'
+        tot_alu_sec = 0.0
+        for item in list_prof_det:
+            s_serie = item.get("Série", "-")
+            s_ref = item.get("Référence", "-")
+            s_qte = item.get("Quantité Barres", 0)
+            s_pu = item.get("Prix Unitaire (DA)", 0.0)
+            s_tot = item.get("Total HT (DA)", 0.0)
+            tot_alu_sec += s_tot
+            html_prof_det += f'<tr><td>{s_serie}</td><td><b>{s_ref}</b></td><td class="center-text" style="font-weight:bold;">{s_qte}</td><td class="center-text">{s_pu:,.2f} DA</td><td class="center-text" style="font-weight:bold; color:#047857;">{s_tot:,.2f} DA</td></tr>'
+        html_prof_det += f'<tr style="background-color: #D1FAE5; font-weight: bold;"><td colspan="4" style="text-align: right;">TOTAL HT PROFILÉS ALUMINIUM :</td><td class="center-text" style="color:#065F46; font-size:16px;">{tot_alu_sec:,.2f} DA</td></tr></tbody></table>'
+        st.markdown(html_prof_det, unsafe_allow_html=True)
+    elif not st.session_state.chassis_rows_v27.empty:
         st.dataframe(st.session_state.chassis_rows_v27, use_container_width=True)
+        st.info("💡 Remarque : Pour obtenir la liste exacte des barres alu à commander avec prix, générez d'abord le débit dans le module '📐 Fiche Atelier & Débit'.")
     else:
         st.info("Aucun châssis enregistré.")
 
+    # -------------------------------------------------------------
+    # 2. DÉTAIL VITRAGE & MIROITERIE
+    # -------------------------------------------------------------
+    st.markdown('<div style="page-break-before: always; margin-top: 30px;"></div>', unsafe_allow_html=True)
     st.markdown("### 💎 2. Détail Vitrage & Miroiterie")
+
+    titre_pdf_vit = f"Devis_Detail_Vitrage_{NOM_PROJET}_{DATE_DU_JOUR}".replace(" ", "_").replace("'", "")
+    components.html(f"""
+        <button onclick="
+            var oldTitle = window.parent.document.title; 
+            window.parent.document.title = '{titre_pdf_vit}'; 
+            setTimeout(function(){{ window.parent.print(); }}, 100);
+            setTimeout(function(){{ window.parent.document.title = oldTitle; }}, 2000);
+        " style="background-color: #2563EB; color: white; padding: 10px 18px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 14px; width: 100%; margin-bottom: 10px;">
+        🖨️ IMPRIMER CE DÉTAIL : DEVIS VITRAGE & MIROITERIE (PDF)
+        </button>
+    """, height=55)
+
     list_vit_det = st.session_state.get("list_vitrages_detail", [])
     if list_vit_det:
-        st.dataframe(pd.DataFrame(list_vit_det), use_container_width=True)
+        html_vit_det = '<table class="print-table" style="width: 100%;"><thead><tr><th>Repère</th><th>Ouvrage</th><th>Désignation</th><th>Type Vitrage</th><th class="center-text">Dimensions (mm)</th><th class="center-text">Qté</th><th class="center-text">Surf. Totale (m²)</th><th class="center-text">Total HT (DA)</th></tr></thead><tbody>'
+        tot_vit_sec = 0.0
+        for item in list_vit_det:
+            rep = item.get("Repère", "-")
+            ouvr = item.get("Ouvrage", "-")
+            desig = item.get("Désignation", "-")
+            t_vit = item.get("Type Vitrage", "-")
+            l_v = item.get("Largeur (mm)", 0)
+            h_v = item.get("Hauteur (mm)", 0)
+            q_v = item.get("Qté", 1)
+            s_tot = item.get("Surf. Totale (m²)", 0.0)
+            p_tot = item.get("Prix Total (DA)", 0.0)
+            tot_vit_sec += p_tot
+            html_vit_det += f'<tr><td><b>{rep}</b></td><td>{ouvr}</td><td>{desig}</td><td>{t_vit}</td><td class="center-text">{l_v} × {h_v}</td><td class="center-text" style="font-weight:bold;">{q_v}</td><td class="center-text">{s_tot:.2f}</td><td class="center-text" style="font-weight:bold; color:#047857;">{p_tot:,.2f} DA</td></tr>'
+        html_vit_det += f'<tr style="background-color: #DBEAFE; font-weight: bold;"><td colspan="7" style="text-align: right;">TOTAL HT VITRAGE :</td><td class="center-text" style="color:#1E3A8A; font-size:16px;">{tot_vit_sec:,.2f} DA</td></tr></tbody></table>'
+        st.markdown(html_vit_det, unsafe_allow_html=True)
     else:
-        st.info("Aucun calcul de vitrage n'a été effectué pour le moment (rendez-vous dans le module 'Carnet de Vitrage').")
+        st.info("Aucun calcul de vitrage n'a été effectué pour le moment (rendez-vous dans le module '🪟 Carnet de Vitrage').")
 
+    # -------------------------------------------------------------
+    # 3. DÉTAIL QUINCAILLERIE, ACCESSOIRES & JOINTS
+    # -------------------------------------------------------------
+    st.markdown('<div style="page-break-before: always; margin-top: 30px;"></div>', unsafe_allow_html=True)
     st.markdown("### 🛒 3. Détail Quincaillerie, Accessoires & Joints")
+
+    titre_pdf_quinc = f"Devis_Detail_Quincaillerie_{NOM_PROJET}_{DATE_DU_JOUR}".replace(" ", "_").replace("'", "")
+    components.html(f"""
+        <button onclick="
+            var oldTitle = window.parent.document.title; 
+            window.parent.document.title = '{titre_pdf_quinc}'; 
+            setTimeout(function(){{ window.parent.print(); }}, 100);
+            setTimeout(function(){{ window.parent.document.title = oldTitle; }}, 2000);
+        " style="background-color: #D97706; color: white; padding: 10px 18px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 14px; width: 100%; margin-bottom: 10px;">
+        🖨️ IMPRIMER CE DÉTAIL : DEVIS QUINCAILLERIE & JOINTS (PDF)
+        </button>
+    """, height=55)
+
     list_acc_det = st.session_state.get("list_acc_detail", [])
     list_jnt_det = st.session_state.get("list_joints_detail", [])
-    if list_acc_det:
-        st.markdown("#### Accessoires :")
-        st.dataframe(pd.DataFrame(list_acc_det), use_container_width=True)
-    if list_jnt_det:
-        st.markdown("#### Joints & Brosse :")
-        st.dataframe(pd.DataFrame(list_jnt_det), use_container_width=True)
-    if not list_acc_det and not list_jnt_det:
-        st.info("Aucun calcul d'accessoires n'a été effectué (rendez-vous dans 'Quincaillerie & Joints').")
 
-    st.markdown("### 🏠 4. Détail Volets Roulants")
-    list_vol_det = st.session_state.get("list_volets_detail", [])
-    list_vol_fin = st.session_state.get("list_volets_financier", [])
-    if list_vol_det:
-        st.markdown("#### Détail des Tabliers :")
-        st.dataframe(pd.DataFrame(list_vol_det), use_container_width=True)
-    if list_vol_fin:
-        st.markdown("#### Sous-détail Financier Volets :")
-        st.dataframe(pd.DataFrame(list_vol_fin), use_container_width=True)
-    if not list_vol_det and not list_vol_fin:
-        st.info("Aucun calcul de volet n'a été effectué (rendez-vous dans 'Volets Roulants').")
+    if list_acc_det or list_jnt_det:
+        if list_acc_det:
+            st.markdown("#### Accessoires & Serrures :")
+            html_acc_det = '<table class="print-table" style="width: 100%;"><thead><tr><th>Gamme / Série</th><th>Référence Article</th><th>Désignation Accessoire</th><th class="center-text">Quantité</th><th class="center-text">Prix Unitaire (DA)</th><th class="center-text">Total HT (DA)</th></tr></thead><tbody>'
+            tot_acc_sec = 0.0
+            for item in list_acc_det:
+                s_ser = item.get("Série", "-")
+                s_ref = item.get("Référence Article", item.get("Article", "-"))
+                s_des = item.get("Désignation", "-")
+                s_qte = item.get("Quantité", 0)
+                s_pu = item.get("Prix Unitaire (DA)", 0.0)
+                s_tot = item.get("Total HT (DA)", 0.0)
+                tot_acc_sec += s_tot
+                html_acc_det += f'<tr><td>{s_ser}</td><td><b>{s_ref}</b></td><td>{s_des}</td><td class="center-text" style="font-weight:bold;">{s_qte}</td><td class="center-text">{s_pu:,.2f} DA</td><td class="center-text" style="font-weight:bold; color:#047857;">{s_tot:,.2f} DA</td></tr>'
+            html_acc_det += f'<tr style="background-color: #FEF3C7; font-weight: bold;"><td colspan="5" style="text-align: right;">SOUS-TOTAL ACCESSOIRES :</td><td class="center-text" style="color:#B45309;">{tot_acc_sec:,.2f} DA</td></tr></tbody></table>'
+            st.markdown(html_acc_det, unsafe_allow_html=True)
 
-    st.markdown("### 🚧 5. Détail Garde-corps")
-    if not st.session_state.df_garde_corps.empty:
-        st.dataframe(st.session_state.df_garde_corps, use_container_width=True)
+        if list_jnt_det:
+            st.markdown("#### Joints d'Étanchéité & Brosse :")
+            html_jnt_det = '<table class="print-table" style="width: 100%;"><thead><tr><th>Série</th><th>Référence Joint</th><th>Désignation</th><th class="center-text">Métrage Total (m)</th><th class="center-text">Prix / m (DA)</th><th class="center-text">Total HT (DA)</th></tr></thead><tbody>'
+            tot_jnt_sec = 0.0
+            for item in list_jnt_det:
+                s_ser = item.get("Série", "-")
+                s_ref = item.get("Référence", item.get("Joint / Brosse", "-"))
+                s_des = item.get("Désignation", "-")
+                s_qte = item.get("Métrage Total (m)", item.get("Quantité Totale (m)", 0.0))
+                s_pu = item.get("Prix Unitaire /m (DA)", item.get("Prix Unitaire (DA)", 0.0))
+                s_tot = item.get("Total HT (DA)", 0.0)
+                tot_jnt_sec += s_tot
+                html_jnt_det += f'<tr><td>{s_ser}</td><td><b>{s_ref}</b></td><td>{s_des}</td><td class="center-text" style="font-weight:bold;">{s_qte:.2f} m</td><td class="center-text">{s_pu:,.2f} DA</td><td class="center-text" style="font-weight:bold; color:#047857;">{s_tot:,.2f} DA</td></tr>'
+            html_jnt_det += f'<tr style="background-color: #FEF3C7; font-weight: bold;"><td colspan="5" style="text-align: right;">SOUS-TOTAL JOINTS :</td><td class="center-text" style="color:#B45309;">{tot_jnt_sec:,.2f} DA</td></tr></tbody></table>'
+            st.markdown(html_jnt_det, unsafe_allow_html=True)
+
+        st.markdown(f'<div style="text-align:right; font-weight:bold; font-size:16px; color:#B45309; padding: 8px; background-color:#FFFBEB; border:1px solid #FCD34D; border-radius:4px;">TOTAL HT QUINCAILLERIE & JOINTS : {st.session_state.total_accessoires:,.2f} DA</div>', unsafe_allow_html=True)
     else:
-        st.info("Aucun garde-corps renseigné.")
+        st.info("Aucun calcul d'accessoires ou de joints n'a été effectué pour le moment (rendez-vous dans le module '🛒 Quincaillerie & Joints').")
+
+    # -------------------------------------------------------------
+    # 4. DÉTAIL VOLETS ROULANTS
+    # -------------------------------------------------------------
+    st.markdown('<div style="page-break-before: always; margin-top: 30px;"></div>', unsafe_allow_html=True)
+    st.markdown("### 🏠 4. Détail Volets Roulants")
+
+    titre_pdf_vr = f"Devis_Detail_Volets_{NOM_PROJET}_{DATE_DU_JOUR}".replace(" ", "_").replace("'", "")
+    components.html(f"""
+        <button onclick="
+            var oldTitle = window.parent.document.title; 
+            window.parent.document.title = '{titre_pdf_vr}'; 
+            setTimeout(function(){{ window.parent.print(); }}, 100);
+            setTimeout(function(){{ window.parent.document.title = oldTitle; }}, 2000);
+        " style="background-color: #059669; color: white; padding: 10px 18px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 14px; width: 100%; margin-bottom: 10px;">
+        🖨️ IMPRIMER CE DÉTAIL : DEVIS VOLETS ROULANTS (PDF)
+        </button>
+    """, height=55)
+
+    list_vol_fin = st.session_state.get("list_volets_financier", [])
+    if list_vol_fin:
+        html_vol_det = '<table class="print-table" style="width: 100%;"><thead><tr><th>Catégorie / Poste</th><th>Description & Détail</th><th class="center-text">Quantité</th><th class="center-text">Prix Unitaire (DA)</th><th class="center-text">Total HT (DA)</th></tr></thead><tbody>'
+        tot_vol_sec = 0.0
+        for item in list_vol_fin:
+            v_typ = item.get("Type", item.get("Élément", "-"))
+            v_des = item.get("Description", item.get("Détail", "-"))
+            v_qte = item.get("Quantité", 1)
+            v_pu = item.get("Prix Unitaire (DA)", 0.0)
+            v_tot = item.get("Total HT (DA)", item.get("Montant HT (DA)", 0.0))
+            tot_vol_sec += v_tot
+            html_vol_det += f'<tr><td><b>{v_typ}</b></td><td>{v_des}</td><td class="center-text" style="font-weight:bold;">{v_qte}</td><td class="center-text">{v_pu:,.2f} DA</td><td class="center-text" style="font-weight:bold; color:#047857;">{v_tot:,.2f} DA</td></tr>'
+        html_vol_det += f'<tr style="background-color: #D1FAE5; font-weight: bold;"><td colspan="4" style="text-align: right;">TOTAL HT VOLETS ROULANTS :</td><td class="center-text" style="color:#065F46; font-size:16px;">{st.session_state.total_volets:,.2f} DA</td></tr></tbody></table>'
+        st.markdown(html_vol_det, unsafe_allow_html=True)
+    else:
+        st.info("Aucun calcul de volet n'a été effectué pour le moment (rendez-vous dans le module '🏠 Volets Roulants').")
+
+    # -------------------------------------------------------------
+    # 5. DÉTAIL GARDE-CORPS
+    # -------------------------------------------------------------
+    st.markdown('<div style="page-break-before: always; margin-top: 30px;"></div>', unsafe_allow_html=True)
+    st.markdown("### 🚧 5. Détail Garde-corps")
+
+    titre_pdf_gc = f"Devis_Detail_Gardecorps_{NOM_PROJET}_{DATE_DU_JOUR}".replace(" ", "_").replace("'", "")
+    components.html(f"""
+        <button onclick="
+            var oldTitle = window.parent.document.title; 
+            window.parent.document.title = '{titre_pdf_gc}'; 
+            setTimeout(function(){{ window.parent.print(); }}, 100);
+            setTimeout(function(){{ window.parent.document.title = oldTitle; }}, 2000);
+        " style="background-color: #7C3AED; color: white; padding: 10px 18px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 14px; width: 100%; margin-bottom: 10px;">
+        🖨️ IMPRIMER CE DÉTAIL : DEVIS GARDE-CORPS (PDF)
+        </button>
+    """, height=55)
+
+    if st.session_state.total_gardecorps > 0 or not st.session_state.df_garde_corps.empty:
+        html_gc_det = '<table class="print-table" style="width: 100%;"><thead><tr><th>Composant Garde-corps</th><th>Détail / Dimensions</th><th class="center-text">Montant HT (DA)</th></tr></thead><tbody>'
+        html_gc_det += f'<tr><td><b>Profilés Aluminium Garde-Corps</b></td><td>Débit barres 6m</td><td class="center-text" style="font-weight:bold; color:#047857;">{st.session_state.total_gardecorps:,.2f} DA</td></tr>'
+        html_gc_det += f'<tr style="background-color: #EDE9FE; font-weight: bold;"><td colspan="2" style="text-align: right;">TOTAL HT GARDE-CORPS :</td><td class="center-text" style="color:#5B21B6; font-size:16px;">{st.session_state.total_gardecorps:,.2f} DA</td></tr></tbody></table>'
+        st.markdown(html_gc_det, unsafe_allow_html=True)
+    else:
+        st.info("Aucun garde-corps renseigné ou calculé.")
