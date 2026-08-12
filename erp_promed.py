@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import json
@@ -485,7 +486,7 @@ menu_selection = st.sidebar.radio(
         "🛒 Quincaillerie & Joints", 
         "🏠 Volets Roulants", 
         "🚧 Garde-corps",
-        "📊 Devis Global du Projet"
+        "📊 Devis Global du Projet",
         "🛠️ Gestionnaire de Bibliothèque", 
         "💰 Mes Prix Unitaires",
         
