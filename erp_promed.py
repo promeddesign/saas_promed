@@ -1275,8 +1275,8 @@ elif menu_selection == "🏠 Volets Roulants":
                             if chute_pct > 0: html_barre_div += f'<div class="bar-chute" style="width: {chute_pct}%;"></div>'
                             html_barre_div += '</div>'
                             
-                            # Création du repère personnalisé (ex: Rep 1 (Inj)/5.5m)
-                            repere_str = f"Rep {compteur_repere} ({type_short})/{longueur_m:g}m"
+                            # Création du repère L1, L2, etc.
+                            repere_str = f"L{compteur_repere}"
                             
                             html_vr += f'<tr><td style="font-weight: bold; font-size: 13px;">{repere_str}</td><td style="padding: 10px;">{html_barre_div}</td><td class="center-text" style="font-weight: bold; font-size: 15px;">{qty}</td><td class="center-text">{int(chute_bar)}</td><td class="center-text">{chute_pct:.1f}%</td></tr>'
                             
