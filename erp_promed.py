@@ -1238,7 +1238,7 @@ elif menu_selection == "🏠 Volets Roulants":
                             if is_identical: gb['qty'] += 1; matched = True; break
                     if not matched: grouped_bars_vr.append({'pieces': bar, 'qty': 1})
 
-                html_vr = f'<table class="print-table" style="width: 100%;"><thead><tr><th style="width: 15%;">LAMES ({type_lame})</th><th style="width: 55%; text-align: center;">PLAN DE COUPE</th><th style="width: 10%; text-align: center;">QTÉ BARRES</th><th style="width: 10%; text-align: center;">CHUTE (mm)</th><th style="width: 10%; text-align: center;">PERTE %</th></tr></thead><tbody>'
+                html_vr = f'<table class="print-table" style="width: 100%;"><thead><tr><th style="width: 15%;">LAMES</th><th style="width: 55%; text-align: center;">PLAN DE COUPE</th><th style="width: 10%; text-align: center;">QTÉ BARRES</th><th style="width: 10%; text-align: center;">CHUTE (mm)</th><th style="width: 10%; text-align: center;">PERTE %</th></tr></thead><tbody>'
                 refs_uniques_vr = list(set([c["ref"] for c in lames_a_couper]))
                 map_couleurs_vr = {ref: PALETTE_COULEURS[i % len(PALETTE_COULEURS)] for i, ref in enumerate(refs_uniques_vr)}
                 
