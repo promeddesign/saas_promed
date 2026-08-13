@@ -1072,6 +1072,7 @@ elif menu_selection == "🏠 Volets Roulants":
     st.markdown("### ⚙️ 1. Paramètres du Tablier")
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1: hauteur_lame = st.number_input("Hauteur lame (mm)", value=43.0, step=1.0)
+    with col2: type_lame = st.selectbox("Type de lame", ["Injectée", "Extrudée"])
     with col3: jeu_coulisses = st.number_input("Jeu coulisses (mm)", value=0.0, step=1.0)
     with col4: longueur_barre_vr = st.number_input("Lg barre lame (mm)", value=5500, step=100)
     with col5: epaisseur_scie_vr = st.number_input("Trait scie (mm)", value=5, step=1)
