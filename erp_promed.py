@@ -1233,7 +1233,7 @@ elif menu_selection == "🏠 Volets Roulants":
             if has_cuts:
                 for type_lame_actuel, coupes_specifiques in lames_a_couper_par_type.items():
                     if coupes_specifiques:
-                        st.markdown(f"#### 📐 Plan de coupe - Lames {type_lame_actuel}")
+                        st.markdown(f"#### 📐 Plan de coupe - Lame {type_lame_actuel}")
                         
                         barres_optimisees = optimize_cutting_1d_with_ref(coupes_specifiques, longueur_barre_vr, epaisseur_scie_vr)
                         grouped_bars_vr = []
@@ -1256,9 +1256,7 @@ elif menu_selection == "🏠 Volets Roulants":
                         total_barres_vr = 0
                         compteur_repere = 1
                         
-                        # Formatage du repère: (Inj) ou (Ext) / Li en mètres
-                        type_short = "Inj" if type_lame_actuel == "Injectée" else "Ext"
-                        longueur_m = longueur_barre_vr / 1000
+              
                         
                         for gb in grouped_bars_vr:
                             bar = gb['pieces']; qty = gb['qty']; total_barres_vr += qty
