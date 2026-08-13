@@ -1070,12 +1070,11 @@ elif menu_selection == "🏠 Volets Roulants":
     st.markdown('<div class="section-header no-print">🏠 Module Volets Roulants & Tarification</div>', unsafe_allow_html=True)
     
     st.markdown("### ⚙️ 1. Paramètres du Tablier")
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3, col4 = st.columns(4)
     with col1: hauteur_lame = st.number_input("Hauteur lame (mm)", value=43.0, step=1.0)
-    with col2: type_lame = st.selectbox("Type de lame", ["Injectée", "Extrudée"])
-    with col3: jeu_coulisses = st.number_input("Jeu coulisses (mm)", value=0.0, step=1.0)
-    with col4: longueur_barre_vr = st.number_input("Lg barre lame (mm)", value=5500, step=100)
-    with col5: epaisseur_scie_vr = st.number_input("Trait scie (mm)", value=5, step=1)
+    with col2: jeu_coulisses = st.number_input("Jeu coulisses (mm)", value=0.0, step=1.0)
+    with col3: longueur_barre_vr = st.number_input("Lg barre lame (mm)", value=5500, step=100)
+    with col4: epaisseur_scie_vr = st.number_input("Trait scie (mm)", value=5, step=1)
 
     st.markdown("### 💰 2. Saisie des Prix Unitaires (Volets)")
     c_p1, c_p2, c_p3, c_p4, c_p5 = st.columns(5)
@@ -1116,7 +1115,7 @@ elif menu_selection == "🏠 Volets Roulants":
             type_vr = str(row.get("Volet Roulant", "")).capitalize()
             if repere not in st.session_state.vr_config_chassis:
                 st.session_state.vr_config_chassis[repere] = {
-                    "type_lame": type_lame,
+                    "type_lame": "Injectée", # Valeur par défaut 
                     "kit_moteur": True
                 }
             cfg = st.session_state.vr_config_chassis[repere]
@@ -1171,7 +1170,7 @@ elif menu_selection == "🏠 Volets Roulants":
                 qte_chassis = int(row.get("Qté", 1))
                 h_caisson = float(row.get("H Caisson", 0))
 
-                cfg_row = st.session_state.get("vr_config_chassis", {}).get(repere, {"type_lame": type_lame, "kit_moteur": True})
+                cfg_row = st.session_state.get("vr_config_chassis", {}).get(repere, {"type_lame": "Injectée", "kit_moteur": True})
                 kit_moteur = cfg_row["kit_moteur"]
                 type_lame_chassis = cfg_row["type_lame"]
 
