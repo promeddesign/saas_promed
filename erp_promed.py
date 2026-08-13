@@ -1157,7 +1157,7 @@ elif menu_selection == "🏠 Volets Roulants":
 
             st.markdown('<div class="excel-head-blue">📝 Détail des Tabliers & Sous-Détail Financier</div>', unsafe_allow_html=True)
             
-            lames_a_couper = []
+            lames_a_couper_par_type = {"Injectée": [], "Extrudée": []}
             details_tabliers = []
             sous_detail_vr = []
             st.session_state.total_volets = 0.0
@@ -1210,8 +1210,11 @@ elif menu_selection == "🏠 Volets Roulants":
                     "TOTAL (DA)": round(total_ligne_vr, 2)
                 })
 
+                # Ajout à la liste spécifique du type de lame
                 for _ in range(nb_lames_total):
-                    lames_a_couper.append({"ref": repere, "length": largeur_lame})
+                    if type_lame_chassis not in lames_a_couper_par_type:
+                        lames_a_couper_par_type[type_lame_chassis] = []
+                    lames_a_couper_par_type[type_lame_chassis].append({"ref": repere, "length": largeur_lame})
 
             st.session_state.list_volets_detail = details_tabliers
             st.session_state.list_volets_financier = sous_detail_vr
@@ -1222,46 +1225,66 @@ elif menu_selection == "🏠 Volets Roulants":
             st.success(f"**Montant Total Volets Roulants : {st.session_state.total_volets:,.2f} DA**")
 
             st.markdown("---")
-            st.markdown('<div class="excel-head-yellow">✂️ Optimisation de Coupe des Lames (5.5m)</div>', unsafe_allow_html=True)
+            st.markdown('<div class="excel-head-yellow">✂️ Optimisation de Coupe des Lames</div>', unsafe_allow_html=True)
             
-            if lames_a_couper:
-                barres_optimisees = optimize_cutting_1d_with_ref(lames_a_couper, longueur_barre_vr, epaisseur_scie_vr)
-                grouped_bars_vr = []
-                for bar in barres_optimisees:
-                    matched = False
-                    for gb in grouped_bars_vr:
-                        if len(bar) == len(gb['pieces']):
-                            is_identical = True
-                            for p1, p2 in zip(bar, gb['pieces']):
-                                if p1['length'] != p2['length'] or p1['ref'] != p2['ref']:
-                                    is_identical = False; break
-                            if is_identical: gb['qty'] += 1; matched = True; break
-                    if not matched: grouped_bars_vr.append({'pieces': bar, 'qty': 1})
+            # --- Génération des plans de coupe par type ---
+            has_cuts = any(len(coupes) > 0 for coupes in lames_a_couper_par_type.values())
+            
+            if has_cuts:
+                for type_lame_actuel, coupes_specifiques in lames_a_couper_par_type.items():
+                    if coupes_specifiques:
+                        st.markdown(f"#### 📐 Plan de coupe - Lames {type_lame_actuel}")
+                        
+                        barres_optimisees = optimize_cutting_1d_with_ref(coupes_specifiques, longueur_barre_vr, epaisseur_scie_vr)
+                        grouped_bars_vr = []
+                        for bar in barres_optimisees:
+                            matched = False
+                            for gb in grouped_bars_vr:
+                                if len(bar) == len(gb['pieces']):
+                                    is_identical = True
+                                    for p1, p2 in zip(bar, gb['pieces']):
+                                        if p1['length'] != p2['length'] or p1['ref'] != p2['ref']:
+                                            is_identical = False; break
+                                    if is_identical: gb['qty'] += 1; matched = True; break
+                            if not matched: grouped_bars_vr.append({'pieces': bar, 'qty': 1})
 
-                html_vr = f'<table class="print-table" style="width: 100%;"><thead><tr><th style="width: 15%;">LAMES</th><th style="width: 55%; text-align: center;">PLAN DE COUPE</th><th style="width: 10%; text-align: center;">QTÉ BARRES</th><th style="width: 10%; text-align: center;">CHUTE (mm)</th><th style="width: 10%; text-align: center;">PERTE %</th></tr></thead><tbody>'
-                refs_uniques_vr = list(set([c["ref"] for c in lames_a_couper]))
-                map_couleurs_vr = {ref: PALETTE_COULEURS[i % len(PALETTE_COULEURS)] for i, ref in enumerate(refs_uniques_vr)}
-                
-                total_barres_vr = 0
-                for gb in grouped_bars_vr:
-                    bar = gb['pieces']; qty = gb['qty']; total_barres_vr += qty
-                    used_in_bar = sum(c['length'] for c in bar)
-                    bar_blade_loss = (len(bar) - 1) * epaisseur_scie_vr if len(bar) > 1 else 0
-                    chute_bar = longueur_barre_vr - used_in_bar - bar_blade_loss
-                    chute_pct = (chute_bar / longueur_barre_vr) * 100
+                        html_vr = f'<table class="print-table" style="width: 100%; margin-bottom: 20px;"><thead><tr><th style="width: 18%;">LAMES {type_lame_actuel.upper()}</th><th style="width: 52%; text-align: center;">PLAN DE COUPE</th><th style="width: 10%; text-align: center;">QTÉ BARRES</th><th style="width: 10%; text-align: center;">CHUTE (mm)</th><th style="width: 10%; text-align: center;">PERTE %</th></tr></thead><tbody>'
+                        
+                        refs_uniques_vr = list(set([c["ref"] for c in coupes_specifiques]))
+                        map_couleurs_vr = {ref: PALETTE_COULEURS[i % len(PALETTE_COULEURS)] for i, ref in enumerate(refs_uniques_vr)}
+                        
+                        total_barres_vr = 0
+                        compteur_repere = 1
+                        
+                        # Formatage du repère: (Inj) ou (Ext) / Li en mètres
+                        type_short = "Inj" if type_lame_actuel == "Injectée" else "Ext"
+                        longueur_m = longueur_barre_vr / 1000
+                        
+                        for gb in grouped_bars_vr:
+                            bar = gb['pieces']; qty = gb['qty']; total_barres_vr += qty
+                            used_in_bar = sum(c['length'] for c in bar)
+                            bar_blade_loss = (len(bar) - 1) * epaisseur_scie_vr if len(bar) > 1 else 0
+                            chute_bar = longueur_barre_vr - used_in_bar - bar_blade_loss
+                            chute_pct = (chute_bar / longueur_barre_vr) * 100
 
-                    html_barre_div = '<div class="bar-container">'
-                    for cut in bar:
-                        pct_largeur = ((cut['length'] + epaisseur_scie_vr) / longueur_barre_vr) * 100
-                        couleur = map_couleurs_vr.get(cut['ref'], "#1E40AF")
-                        html_barre_div += f'<div class="bar-segment" style="width: {pct_largeur}%; background-color: {couleur};" title="{cut["ref"]} - {cut["length"]} mm">{int(cut["length"])}</div>'
-                    if chute_pct > 0: html_barre_div += f'<div class="bar-chute" style="width: {chute_pct}%;"></div>'
-                    html_barre_div += '</div>'
-                    html_vr += f'<tr><td style="font-weight: bold;">Barre 5.5m</td><td style="padding: 10px;">{html_barre_div}</td><td class="center-text" style="font-weight: bold; font-size: 15px;">{qty}</td><td class="center-text">{int(chute_bar)}</td><td class="center-text">{chute_pct:.1f}%</td></tr>'
-                
-                html_vr += f'<tr style="background-color: #DBEAFE; font-weight: bold;"><td colspan="2" style="text-align: right;">TOTAL BARRES À COMMANDER :</td><td class="center-text">{total_barres_vr}</td><td colspan="2"></td></tr>'
-                html_vr += "</tbody></table>"
-                st.markdown(html_vr, unsafe_allow_html=True)
+                            html_barre_div = '<div class="bar-container">'
+                            for cut in bar:
+                                pct_largeur = ((cut['length'] + epaisseur_scie_vr) / longueur_barre_vr) * 100
+                                couleur = map_couleurs_vr.get(cut['ref'], "#1E40AF")
+                                html_barre_div += f'<div class="bar-segment" style="width: {pct_largeur}%; background-color: {couleur};" title="{cut["ref"]} - {cut["length"]} mm">{int(cut["length"])}</div>'
+                            if chute_pct > 0: html_barre_div += f'<div class="bar-chute" style="width: {chute_pct}%;"></div>'
+                            html_barre_div += '</div>'
+                            
+                            # Création du repère personnalisé (ex: Rep 1 (Inj)/5.5m)
+                            repere_str = f"Rep {compteur_repere} ({type_short})/{longueur_m:g}m"
+                            
+                            html_vr += f'<tr><td style="font-weight: bold; font-size: 13px;">{repere_str}</td><td style="padding: 10px;">{html_barre_div}</td><td class="center-text" style="font-weight: bold; font-size: 15px;">{qty}</td><td class="center-text">{int(chute_bar)}</td><td class="center-text">{chute_pct:.1f}%</td></tr>'
+                            
+                            compteur_repere += 1
+                        
+                        html_vr += f'<tr style="background-color: #DBEAFE; font-weight: bold;"><td colspan="2" style="text-align: right;">TOTAL BARRES ({type_lame_actuel.upper()}) À COMMANDER :</td><td class="center-text">{total_barres_vr}</td><td colspan="2"></td></tr>'
+                        html_vr += "</tbody></table>"
+                        st.markdown(html_vr, unsafe_allow_html=True)
 elif menu_selection == "🚧 Garde-corps":
     st.markdown('<div class="section-header no-print">🧮 Module Garde-Corps — Optimisation & Tarification</div>', unsafe_allow_html=True)
     
